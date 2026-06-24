@@ -207,7 +207,7 @@ async function seed() {
                 { name: 'Electrical Layout', nomenclature: 'ELEC-001', instruction: 'Verify all electrical drawings', profile: 'Electrical', status: 'active' },
                 { name: 'Plumbing Network', nomenclature: 'PLUMB-001', instruction: 'Pressure test all lines', profile: 'Plumbing', status: 'on_hold' },
             ]],
-        ] as const) {
+        ]) {
             const schemaName = `org_${orgId.replace(/-/g, '_')}`;
 
             // Create schema
@@ -252,7 +252,7 @@ async function seed() {
             console.log(`  Created ${teams.length} teams`);
 
             // Create projects with checklists
-            for (const p of projects as any[]) {
+            for (const p of projects) {
                 const { rows: existingProj } = await client.query(
                     `SELECT id FROM "${schemaName}".projects WHERE name = $1`, [p.name]
                 );

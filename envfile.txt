@@ -5,3 +5,4 @@ PG_USER=postgres
 PG_PASSWORD=root
 DATABASE_URL=postgresql://postgres:root@localhost:5432/digiQC
 JWT_SECRET=digiqc-saas-jwt-secret-change-in-prod
+

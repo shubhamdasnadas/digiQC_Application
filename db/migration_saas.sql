@@ -143,7 +143,7 @@ BEGIN
 
     -- Only create if schema doesn't exist yet
     IF NOT EXISTS (
-      SELECT 1 FROM information_schema.schemata WHERE schema_name = schema_name
+      SELECT 1 FROM pg_namespace WHERE nspname = schema_name
     ) THEN
       PERFORM public.create_org_schema(org.id);
 
