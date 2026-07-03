@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   FolderKanban, Plus, Search, Upload, FileDown, Pencil, Users as UsersIcon,
 } from 'lucide-react';
@@ -26,12 +27,12 @@ const badgeClass: Record<string, string> = {
 };
 
 export default function Projects() {
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<typeof statusOptions[number]>('all');
-  const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [editInitial, setEditInitial] = useState<Partial<Project> | undefined>(undefined);
@@ -147,7 +148,7 @@ export default function Projects() {
           <button onClick={() => setShowImport(true)} className="btn-secondary">
             <Upload size={15} /> Import
           </button>
-          <button onClick={() => setShowAdd(true)} className="btn-primary">
+          <button onClick={() => router.push('/projects/new')} className="btn-primary">
             <Plus size={15} /> Add Project
           </button>
         </div>
@@ -298,18 +299,13 @@ export default function Projects() {
           <FolderKanban size={48} className="mb-4 opacity-30" />
           <p className="text-sm font-medium">No projects found</p>
           <p className="text-xs mt-1">Try adjusting your filters or add a new project</p>
-          <button onClick={() => setShowAdd(true)} className="btn-primary mt-4">
+          <button onClick={() => router.push('/projects/new')} className="btn-primary mt-4">
             <Plus size={14} /> Add Project
           </button>
         </div>
       )}
 
       {/* ─── Modals ─── */}
-      <ProjectFormModal
-        isOpen={showAdd}
-        onClose={() => setShowAdd(false)}
-        onSaved={load}
-      />
       <ProjectFormModal
         isOpen={!!editProjectId}
         onClose={() => {
