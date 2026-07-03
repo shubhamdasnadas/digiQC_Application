@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "types": [
+      "google.maps"
+    ],
     "lib": [
       "dom",
       "dom.iterable",

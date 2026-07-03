@@ -411,14 +411,12 @@ function ToggleRow({
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors ${
-          checked ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-700'
-        }`}
+        className={`relative w-9 h-5 rounded-full transition-colors ${checked ? 'bg-teal-500' : 'bg-gray-300 dark:bg-gray-700'
+          }`}
       >
         <span
-          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-            checked ? 'translate-x-4' : ''
-          }`}
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : ''
+            }`}
         />
       </button>
     </div>
