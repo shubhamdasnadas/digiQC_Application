@@ -1,10 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Component, useEffect, useState, type ReactNode } from 'react';
 import { X, Loader2, Plus } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import type { Project } from '@/lib/types';
 import { TIMEZONES as TIMEZONE_LIST } from '@/lib/types';
+
+class MapErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="rounded-xl border border-rose-300 bg-rose-50 dark:bg-rose-500/10 p-3 text-xs text-rose-800 dark:text-rose-200">
+          Map unavailable — Google Maps API error (rate limit or invalid key). Enter lat/lng manually below.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Lazy-load the map (uses window/google) — only on the client
 const LocationPicker = dynamic(() => import('./LocationPicker'), {
@@ -309,12 +324,14 @@ export default function ProjectFormModal({
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
                 Address Search
               </label>
-              <LocationPicker
-                apiKey={apiKey}
-                initialLat={values.latitude}
-                initialLng={values.longitude}
-                onLocationSelect={handleLocation}
-              />
+              <MapErrorBoundary>
+                <LocationPicker
+                  apiKey={apiKey}
+                  initialLat={values.latitude}
+                  initialLng={values.longitude}
+                  onLocationSelect={handleLocation}
+                />
+              </MapErrorBoundary>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">

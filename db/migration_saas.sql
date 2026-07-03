@@ -29,6 +29,22 @@ CREATE TABLE IF NOT EXISTS public.org_members (
 );
 
 -- ============================================================
+-- HELPER: Derive schema name from org name
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.org_schema_name(org_id uuid)
+RETURNS text
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  org_name text;
+BEGIN
+  SELECT name INTO org_name FROM public.organizations WHERE id = org_id;
+  RETURN 'org_' || lower(regexp_replace(org_name, '[^a-zA-Z0-9]+', '_', 'g'));
+END;
+$$;
+
+-- ============================================================
 -- FUNCTION: Create org schema with all business tables
 -- Called when a new organization is registered
 -- ============================================================
@@ -40,7 +56,7 @@ AS $$
 DECLARE
   schema_name text;
 BEGIN
-  schema_name := 'org_' || replace(org_id::text, '-', '_');
+  schema_name := public.org_schema_name(org_id);
 
   -- Create the schema
   EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', schema_name);
@@ -123,7 +139,7 @@ AS $$
 DECLARE
   schema_name text;
 BEGIN
-  schema_name := 'org_' || replace(org_id::text, '-', '_');
+  schema_name := public.org_schema_name(org_id);
   EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', schema_name);
 END;
 $$;
@@ -139,7 +155,7 @@ DECLARE
   schema_name text;
 BEGIN
   FOR org IN SELECT id FROM public.organizations LOOP
-    schema_name := 'org_' || replace(org.id::text, '-', '_');
+    schema_name := public.org_schema_name(org.id);
 
     -- Only create if schema doesn't exist yet
     IF NOT EXISTS (
@@ -176,6 +192,40 @@ BEGIN
         SELECT id, organization_id, name, email, mobile_no, roles, created_at
         FROM public.super_admins WHERE organization_id = %L
       ', schema_name, org.id);
+    END IF;
+  END LOOP;
+END;
+$$;
+
+
+-- ============================================================
+-- Rename any legacy UUID-based org schemas to org_<name>
+-- Safe to re-run: skips already-renamed, drops orphan UUID schemas
+-- ============================================================
+
+DO $$
+DECLARE
+  rec        RECORD;
+  uuid_schema text;
+  target     text;
+BEGIN
+  FOR rec IN
+    SELECT n.nspname AS uuid_schema, o.id, o.name
+    FROM pg_namespace n
+    JOIN public.organizations o
+      ON n.nspname = 'org_' || replace(o.id::text, '-', '_')
+    WHERE n.nspname ~ '^org_[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12}$'
+  LOOP
+    target := public.org_schema_name(rec.id);
+
+    IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = target) THEN
+      -- Target already exists: drop the leftover UUID schema
+      EXECUTE format('DROP SCHEMA %I CASCADE', rec.uuid_schema);
+      RAISE NOTICE 'Dropped orphan schema % (% already exists)', rec.uuid_schema, target;
+    ELSE
+      -- Rename UUID schema to name-based schema
+      EXECUTE format('ALTER SCHEMA %I RENAME TO %I', rec.uuid_schema, target);
+      RAISE NOTICE 'Renamed % -> %', rec.uuid_schema, target;
     END IF;
   END LOOP;
 END;
