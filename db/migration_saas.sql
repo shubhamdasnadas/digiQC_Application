@@ -1,6 +1,8 @@
 -- DigiQC SAAS Multi-Tenant Migration
--- Run AFTER db/schema.sql (or replace the original schema)
--- Run: psql -U postgres -d digiQC -f db/migration_saas.sql
+-- Run in this order:
+--   1. psql -U postgres -d digiQC -f db/migration_saas.sql
+--   2. psql -U postgres -d digiQC -f db/migration_projects_v2.sql
+--   3. node scripts/seed.js
 
 -- ============================================================
 -- PUBLIC SCHEMA — shared between all organizations
