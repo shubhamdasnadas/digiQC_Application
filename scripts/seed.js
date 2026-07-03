@@ -76,6 +76,18 @@ async function seed() {
         console.log('Creating schema management functions...');
 
         await client.query(`
+      CREATE OR REPLACE FUNCTION public.org_schema_name(org_id uuid)
+      RETURNS text
+      LANGUAGE plpgsql
+      AS $$
+      DECLARE
+        org_name text;
+      BEGIN
+        SELECT name INTO org_name FROM public.organizations WHERE id = org_id;
+        RETURN 'org_' || lower(regexp_replace(org_name, '[^a-zA-Z0-9]+', '_', 'g'));
+      END;
+      $$;
+
       CREATE OR REPLACE FUNCTION public.create_org_schema(org_id uuid)
       RETURNS void
       LANGUAGE plpgsql
@@ -83,7 +95,7 @@ async function seed() {
       DECLARE
         schema_name text;
       BEGIN
-        schema_name := 'org_' || replace(org_id::text, '-', '_');
+        schema_name := public.org_schema_name(org_id);
         EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', schema_name);
         EXECUTE format('CREATE TABLE IF NOT EXISTS %I.teams (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid NOT NULL, name text NOT NULL, type text DEFAULT ''inspection'', team_lead_name text DEFAULT '''', spoc_name text DEFAULT '''', created_at timestamptz DEFAULT now())', schema_name);
         EXECUTE format('CREATE TABLE IF NOT EXISTS %I.projects (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid NOT NULL, name text NOT NULL, nomenclature text DEFAULT '''', instruction text DEFAULT '''', profile text DEFAULT '''', image_url text DEFAULT '''', status text DEFAULT ''active'', created_at timestamptz DEFAULT now())', schema_name);
@@ -208,7 +220,7 @@ async function seed() {
                 { name: 'Plumbing Network', nomenclature: 'PLUMB-001', instruction: 'Pressure test all lines', profile: 'Plumbing', status: 'on_hold' },
             ]],
         ]) {
-            const schemaName = `org_${orgId.replace(/-/g, '_')}`;
+            const schemaName = 'org_' + orgName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
             // Create schema
             await client.query('SELECT public.create_org_schema($1)', [orgId]);

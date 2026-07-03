@@ -209,7 +209,7 @@ AS $$
 DECLARE
   schema_name text;
 BEGIN
-  schema_name := 'org_' || replace(org_id::text, '-', '_');
+  schema_name := public.org_schema_name(org_id);
 
   EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', schema_name);
 
