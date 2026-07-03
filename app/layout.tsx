@@ -4,7 +4,7 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/context/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
-import AppShell from '@/components/AppShell';
+import AppShell from '../components/AppShell';
 
 export const metadata: Metadata = {
   title: 'DigiQC | Quality Control Platform',
