@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ClipboardList, Plus, X, Loader2, Upload, ChevronDown, FileDown } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ClipboardList, Plus, X, Loader2, Upload, ChevronDown, FileDown, Edit2, Copy, Trash2 } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import type { Checklist, Project } from '@/lib/types';
 
 export default function Checklists() {
+  const router = useRouter();
   const [checklists, setChecklists] = useState<(Checklist & { project?: { name: string } })[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +39,14 @@ export default function Checklists() {
       const proj = projects[0];
       const rows = chunk.map(r => ({
         project_id: proj?.id || '',
-        name: sanitizeString(r.name || r.checklist_name || 'Unnamed'),
+        name: sanitizeString(r['Checklist Name'] || r.name || r.checklist_name || 'Unnamed'),
+        reference_number: sanitizeString(r['REFERENCE NUMBER'] || ''),
+        uom: sanitizeString(r['UOM'] || ''),
+        stage_name: sanitizeString(r['Stage Name'] || ''),
+        checkpoint: sanitizeString(r['Checkpoint'] || ''),
+        input_type: sanitizeString(r['Type'] || 'yes_no'),
+        drawing_required: String(r['Photo'] || '').toLowerCase() === 'yes',
+        witness_required: String(r['Remark'] || '').toLowerCase() === 'yes',
       }));
       const res = await fetch('/api/checklists', {
         method: 'POST',
@@ -88,18 +97,44 @@ export default function Checklists() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
-                  <tr>
-                    {['Checklist Name', 'Linked Project', 'Created'].map(h => (
-                      <th key={h} className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">{h}</th>
-                    ))}
+                  <tr className="text-[11px] uppercase tracking-wider">
+                    <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400 w-10">#</th>
+                    <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Checklist</th>
+                    <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">UOM</th>
+                    <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Reference Number</th>
+                    <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th>
+                    <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Updated By</th>
+                    <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Updated At</th>
+                    <th className="px-5 py-3 text-center font-medium text-gray-600 dark:text-gray-400">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {checklists.map(c => (
-                    <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                      <td className="px-5 py-3 text-gray-900 dark:text-white font-medium">{c.name}</td>
-                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.project?.name ?? '—'}</td>
-                      <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">{new Date(c.created_at).toLocaleDateString('en-IN')}</td>
+                  {checklists.map((c, idx) => (
+                    <tr
+                      key={c.id}
+                      onClick={() => router.push(`/checklists/${c.id}`)}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
+                    >
+                      <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">{idx + 1}</td>
+                      <td className="px-5 py-3 text-gray-900 dark:text-white font-medium text-sm">{c.name}</td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.uom ?? '—'}</td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.reference_number ?? '—'}</td>
+                      <td className="px-5 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${c.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
+                          {c.status === 'active' ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.updated_by ?? '—'}</td>
+                      <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">
+                        {c.updated_at ? new Date(c.updated_at).toLocaleString('en-IN') : new Date(c.created_at).toLocaleString('en-IN')}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button className="p-1 hover:text-teal-600 transition-colors" title="Edit"><Edit2 size={14} /></button>
+                          <button className="p-1 hover:text-teal-600 transition-colors" title="Copy"><Copy size={14} /></button>
+                          <button className="p-1 hover:text-red-600 transition-colors" title="Delete"><Trash2 size={14} /></button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -158,7 +193,7 @@ export default function Checklists() {
         isOpen={showImport}
         onClose={() => { setShowImport(false); load(); }}
         title="Import Checklists"
-        description="Upload an Excel or CSV file with columns: name, checklist_name"
+        description="Upload an Excel file with columns: Checklist Name, REFERENCE NUMBER, Stage Name, Checkpoint, Type, Photo, Remark"
         onImport={handleImport}
       />
     </div>

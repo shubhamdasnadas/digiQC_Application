@@ -1,4 +1,4 @@
-export interface Organization {
+perlexport interface Organization {
   id: string;
   name: string;
   user_limit: number;
@@ -105,6 +105,11 @@ export interface Checklist {
   id: string;
   project_id: string;
   name: string;
+  reference_number?: string;
+  uom?: string;
+  status?: 'active' | 'inactive';
+  updated_by?: string;
+  updated_at?: string;
   created_at: string;
 }
 
@@ -119,6 +124,7 @@ export interface ChecklistStage {
 export interface Checkpoint {
   id: string;
   stage_id: string;
+  sr_no: number;
   question: string;
   input_type: 'yes_no' | 'numeric' | 'text';
   drawing_required: boolean;

@@ -53,9 +53,24 @@ export function downloadSampleExcel(dataType: 'projects' | 'teams' | 'organizati
       },
     ],
     checklists: [
-      { name: 'Pre-construction Checklist' },
-      { name: 'Mid-stage Verification' },
-      { name: 'Final Handover QC' },
+      {
+        'Checklist Name': 'Execution - Beam, Slab Shuttering and concreting Pre',
+        'REFERENCE NUMBER': 'PCPL/EXEC/BEAM-SLB-SHT-CONC-PRE-DUR/2025/0001',
+        'Stage Name': 'Pre and During Stage',
+        'Checkpoint': 'Is height of slab from plinth level/lower slab level as defined in the architectural drawing.',
+        'Type': 'Y/N',
+        'Photo': 'Yes',
+        'Remark': 'Verified',
+      },
+      {
+        'Checklist Name': 'Execution - Beam, Slab Shuttering and concreting Pre',
+        'REFERENCE NUMBER': 'PCPL/EXEC/BEAM-SLB-SHT-CONC-PRE-DUR/2025/0001',
+        'Stage Name': 'Pre and During Stage',
+        'Checkpoint': 'Shuttering material used is in good condition?',
+        'Type': 'Y/N',
+        'Photo': 'No',
+        'Remark': 'Checked',
+      },
     ],
   };
 
