@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardList, Plus, X, Loader2, Upload, ChevronDown, FileDown, Edit2, Copy, Trash2 } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
-import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString } from '@/lib/excelImport';
+import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString, parseBoolean } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import type { Checklist, Project } from '@/lib/types';
 
@@ -37,17 +37,20 @@ export default function Checklists() {
   const handleImport = async (data: ParsedRow[]): Promise<ImportResult> => {
     return bulkInsertWithChunking(async (chunk) => {
       const proj = projects[0];
-      const rows = chunk.map(r => ({
-        project_id: proj?.id || '',
-        name: sanitizeString(r['Checklist Name'] || r.name || r.checklist_name || 'Unnamed'),
-        reference_number: sanitizeString(r['REFERENCE NUMBER'] || ''),
-        uom: sanitizeString(r['UOM'] || ''),
-        stage_name: sanitizeString(r['Stage Name'] || ''),
-        checkpoint: sanitizeString(r['Checkpoint'] || ''),
-        input_type: sanitizeString(r['Type'] || 'yes_no'),
-        drawing_required: String(r['Photo'] || '').toLowerCase() === 'yes',
-        witness_required: String(r['Remark'] || '').toLowerCase() === 'yes',
-      }));
+      const rows = chunk.map(r => {
+        const yn = sanitizeString(r['Type'] || r.yn || 'yes_no');
+        return {
+          project_id: proj?.id || '',
+          name: sanitizeString(r['Checklist Name'] || r.checklist_name || r.name || 'Unnamed'),
+          reference_number: sanitizeString(r['REFERENCE NUMBER'] || r.reference_number || ''),
+          uom: sanitizeString(r['UOM'] || r.uom || ''),
+          stage_name: sanitizeString(r['Stage Name'] || r.stage_name || ''),
+          checkpoint: sanitizeString(r['Checkpoint'] || r.checkpoint || ''),
+          input_type: yn.trim().toUpperCase() === 'TEXT' ? 'text' : 'yes_no',
+          drawing_required: parseBoolean(r['Photo'] ?? r.photo),
+          witness_required: parseBoolean(r['Remark'] ?? r.remark),
+        };
+      });
       const res = await fetch('/api/checklists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

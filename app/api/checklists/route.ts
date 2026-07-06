@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
+import { listLibraryChecklists } from '@/lib/checklistLibrary';
 import fs from 'fs';
 import path from 'path';
 
@@ -59,7 +60,8 @@ export async function GET(request: NextRequest) {
       LEFT JOIN projects p ON c.project_id = p.id
       ORDER BY c.created_at DESC
     `);
-    return NextResponse.json(rows);
+    const libraryChecklists = await listLibraryChecklists();
+    return NextResponse.json([...rows, ...libraryChecklists]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
