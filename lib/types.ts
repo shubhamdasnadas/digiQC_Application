@@ -120,6 +120,8 @@ export interface ChecklistStage {
   checklist_id: string;
   sr_no: number;
   name: string;
+  witness_required?: boolean;
+  drawing_required?: boolean;
   created_at: string;
 }
 
@@ -128,9 +130,11 @@ export interface Checkpoint {
   stage_id: string;
   sr_no: number;
   question: string;
-  input_type: 'yes_no' | 'numeric' | 'text';
+  input_type: 'yes_no' | 'numeric' | 'text' | 'options' | 'date';
   drawing_required: boolean;
   witness_required: boolean;
+  photo_required?: boolean;
+  remark_required?: boolean;
   created_at: string;
 }
 

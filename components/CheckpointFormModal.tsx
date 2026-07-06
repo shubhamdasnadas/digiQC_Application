@@ -11,25 +11,28 @@ interface CheckpointFormModalProps {
     stageId: string;
 }
 
+const DEFAULT_FORM = {
+    name: '',
+    question: '',
+    input_type: 'yes_no',
+    photo_required: false,
+    remark_required: false,
+    options: [
+        { value: 'Yes', qc_fail: false },
+        { value: 'No', qc_fail: true }
+    ],
+    numeric_condition: {
+        value: '',
+        qc_fail: false,
+        qc_pass: false
+    }
+};
+
 export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklistId, stageId }: CheckpointFormModalProps) {
-    const [form, setForm] = useState({
-        name: '',
-        question: '',
-        input_type: 'yes_no',
-        photo_required: false,
-        remark_required: false,
-        options: [
-            { value: 'Yes', qc_fail: false },
-            { value: 'No', qc_fail: true }
-        ],
-        numeric_condition: {
-            value: '',
-            qc_fail: false,
-            qc_pass: false
-        }
-    });
+    const [form, setForm] = useState(DEFAULT_FORM);
     const [saving, setSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const questionRef = useRef<HTMLDivElement>(null);
     const [uploadType, setUploadType] = useState<'link' | 'image' | null>(null);
 
     if (!isOpen) return null;
@@ -50,6 +53,8 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
             if (!res.ok) throw new Error('Failed to save checkpoint');
             onSaved();
             onClose();
+            setForm(DEFAULT_FORM);
+            if (questionRef.current) questionRef.current.innerHTML = '';
         } catch (error) {
             console.error('Error saving checkpoint:', error);
         } finally {
@@ -150,10 +155,14 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
                                     <button type="button" onClick={() => executeCommand('removeFormat')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><Type size={14} /></button>
                                 </div>
                                 <div
+                                    ref={questionRef}
                                     contentEditable
-                                    onInput={(e) => setForm({ ...form, question: e.currentTarget.innerHTML })}
+                                    suppressContentEditableWarning
+                                    onInput={(e) => {
+                                        const html = e.currentTarget.innerHTML;
+                                        setForm((f) => ({ ...f, question: html }));
+                                    }}
                                     className="w-full p-3 text-sm text-gray-900 dark:text-white bg-transparent focus:outline-none min-h-[80px]"
-                                    dangerouslySetInnerHTML={{ __html: form.question }}
                                     onBlur={(e) => {
                                         if (e.currentTarget.innerHTML === '') {
                                             // Handle required validation if empty
