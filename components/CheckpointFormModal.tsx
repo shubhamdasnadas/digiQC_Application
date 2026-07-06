@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { X, Bold, Italic, Underline, Link as LinkIcon, Image as ImageIcon, List, ListOrdered, Type } from 'lucide-react';
 
 interface CheckpointFormModalProps {
@@ -29,6 +29,8 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
         }
     });
     const [saving, setSaving] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploadType, setUploadType] = useState<'link' | 'image' | null>(null);
 
     if (!isOpen) return null;
 
@@ -79,6 +81,31 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
         document.execCommand(command, false, value);
     };
 
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const base64 = event.target?.result as string;
+            if (uploadType === 'image') {
+                executeCommand('insertImage', base64);
+            } else if (uploadType === 'link') {
+                // For files, we insert a link with the base64 data or a placeholder
+                // Since standard links are URLs, we'll treat it as a downloadable link
+                executeCommand('createLink', base64);
+            }
+        };
+        reader.readAsDataURL(file);
+        setUploadType(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const triggerFileUpload = (type: 'link' | 'image') => {
+        setUploadType(type);
+        fileInputRef.current?.click();
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 glass" onClick={onClose} />
@@ -115,8 +142,8 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
                                     <button type="button" onClick={() => executeCommand('italic')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><Italic size={14} /></button>
                                     <button type="button" onClick={() => executeCommand('underline')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><Underline size={14} /></button>
                                     <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1" />
-                                    <button type="button" onClick={() => executeCommand('createLink', prompt('Enter URL:') || '')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><LinkIcon size={14} /></button>
-                                    <button type="button" onClick={() => executeCommand('insertImage', prompt('Enter image URL:') || '')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><ImageIcon size={14} /></button>
+                                    <button type="button" onClick={() => triggerFileUpload('link')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><LinkIcon size={14} /></button>
+                                    <button type="button" onClick={() => triggerFileUpload('image')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><ImageIcon size={14} /></button>
                                     <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1" />
                                     <button type="button" onClick={() => executeCommand('insertUnorderedList')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><List size={14} /></button>
                                     <button type="button" onClick={() => executeCommand('insertOrderedList')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><ListOrdered size={14} /></button>
@@ -285,6 +312,13 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
                         </button>
                     </div>
                 </form>
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    accept={uploadType === 'image' ? 'image/*' : '*'}
+                />
             </div>
         </div>
     );
