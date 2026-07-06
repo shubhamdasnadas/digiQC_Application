@@ -1,4 +1,4 @@
-perlexport interface Organization {
+export interface Organization {
   id: string;
   name: string;
   user_limit: number;
@@ -103,7 +103,7 @@ export interface ProjectTeam {
 
 export interface Checklist {
   id: string;
-  project_id: string;
+  project_id: string | null;
   name: string;
   reference_number?: string;
   uom?: string;
@@ -111,6 +111,8 @@ export interface Checklist {
   updated_by?: string;
   updated_at?: string;
   created_at: string;
+  project?: { name: string };
+  source?: 'org' | 'library';
 }
 
 export interface ChecklistStage {

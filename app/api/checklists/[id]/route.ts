@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
+import { getLibraryChecklistDetail } from '@/lib/checklistLibrary';
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const { payload, response } = requireAuth(request);
     if (!payload) return response;
 
-    const { id } = params;
+    const { id } = await params;
 
     try {
         // Fetch checklist details
@@ -19,7 +20,15 @@ export async function GET(
         );
 
         if (checklistRows.length === 0) {
-            return NextResponse.json({ error: 'Checklist not found' }, { status: 404 });
+            const libraryDetail = await getLibraryChecklistDetail(id);
+            if (!libraryDetail) {
+                return NextResponse.json({ error: 'Checklist not found' }, { status: 404 });
+            }
+            return NextResponse.json({
+                ...libraryDetail.checklist,
+                stages: libraryDetail.stages,
+                checkpoints: libraryDetail.checkpoints,
+            });
         }
 
         const checklist = checklistRows[0];
@@ -50,12 +59,12 @@ export async function GET(
 
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const { payload, response } = requireAuth(request);
     if (!payload) return response;
 
-    const { id } = params;
+    const { id } = await params;
 
     try {
         const body = await request.json();

@@ -87,3 +87,9 @@ export function parseDate(value: any): string | null {
   if (isNaN(date.getTime())) return null;
   return date.toISOString().split('T')[0];
 }
+
+export function parseBoolean(value: any): boolean {
+  if (typeof value === 'boolean') return value;
+  const s = String(value ?? '').trim().toLowerCase();
+  return s === 'true' || s === 'yes' || s === 'y';
+}
