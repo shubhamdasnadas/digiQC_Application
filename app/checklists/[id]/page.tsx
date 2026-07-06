@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Checklist, ChecklistStage, Checkpoint } from '@/lib/types';
 import StageFormModal from '@/components/StageFormModal';
+import CheckpointFormModal from '@/components/CheckpointFormModal';
 
 export default function ChecklistDetail() {
     const params = useParams();
@@ -29,6 +30,7 @@ export default function ChecklistDetail() {
     const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
     const [activeStageId, setActiveStageId] = useState<string | null>(null);
     const [isStageModalOpen, setIsStageModalOpen] = useState(false);
+    const [isCheckpointModalOpen, setIsCheckpointModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -215,7 +217,10 @@ export default function ChecklistDetail() {
                             <div className="flex items-center justify-between">
                                 <h2 className="text-xl font-medium text-gray-900 dark:text-white">{activeStage.name}</h2>
                                 <div className="flex items-center gap-3">
-                                    <button className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-full text-xs font-medium hover:bg-slate-800 transition-colors">
+                                    <button
+                                        onClick={() => setIsCheckpointModalOpen(true)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-full text-xs font-medium hover:bg-slate-800 transition-colors"
+                                    >
                                         <Plus size={14} /> Item
                                     </button>
                                     <button className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 rounded-full text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
@@ -313,6 +318,14 @@ export default function ChecklistDetail() {
                 onClose={() => setIsStageModalOpen(false)}
                 onSaved={loadData}
                 checklistId={id}
+            />
+
+            <CheckpointFormModal
+                isOpen={isCheckpointModalOpen}
+                onClose={() => setIsCheckpointModalOpen(false)}
+                onSaved={loadData}
+                checklistId={id}
+                stageId={activeStageId || ''}
             />
         </div>
     );
