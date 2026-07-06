@@ -3,11 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Plus, X, Loader2, Search } from 'lucide-react';
-import TabsPageShell from '@/components/TabsPageShell';
 import DataTable, { type Column } from '@/components/DataTable';
 import type { Issue } from '@/lib/types';
 
-const STATUS_FILTERS = ['all', 'open', 'in_progress', 'resolved', 'closed'] as const;
 const STATUS_LABEL: Record<string, string> = {
   all: 'All',
   open: 'Open',
@@ -16,7 +14,6 @@ const STATUS_LABEL: Record<string, string> = {
   closed: 'Closed',
 };
 
-const SEVERITY_FILTERS = ['all', 'low', 'medium', 'high', 'critical'] as const;
 const SEVERITY_LABEL: Record<string, string> = {
   all: 'All',
   low: 'Low',
@@ -43,16 +40,13 @@ export default function IssueTab() {
   const { id } = useParams<{ id: string }>();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<typeof STATUS_FILTERS[number]>('all');
-  const [severityFilter, setSeverityFilter] = useState<typeof SEVERITY_FILTERS[number]>('all');
+  const [isOverdueFilter, setIsOverdueFilter] = useState(false);
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
 
   const load = async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (statusFilter !== 'all') params.set('status', statusFilter);
-    if (severityFilter !== 'all') params.set('severity', severityFilter);
     if (search) params.set('q', search);
     const res = await fetch(`/api/projects/${id}/issues?${params.toString()}`);
     const data = await res.json();
@@ -60,89 +54,108 @@ export default function IssueTab() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id, statusFilter, severityFilter, search]);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id, search]);
+
+  const filteredIssues = issues.filter(issue => {
+    const matchesSearch = issue.title.toLowerCase().includes(search.toLowerCase()) ||
+      issue.description.toLowerCase().includes(search.toLowerCase());
+
+    if (isOverdueFilter) {
+      if (!issue.due_date) return false;
+      const dueDate = new Date(issue.due_date);
+      const now = new Date();
+      return dueDate < now && issue.status !== 'closed' && issue.status !== 'resolved';
+    }
+
+    return matchesSearch;
+  });
 
   const columns: Column<Issue>[] = [
     { key: 'idx', header: '#', width: '50px', render: (_r, i) => <span className="text-gray-500 text-xs">{i + 1}</span> },
+    { key: 'location', header: 'LOCATION', render: (r) => <span className="text-xs text-gray-500">—</span> },
     {
-      key: 'title', header: 'Title',
-      render: (r) => (
-        <div>
-          <p className="text-sm font-medium text-gray-900 dark:text-white">{r.title}</p>
-          {r.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">{r.description}</p>}
-        </div>
-      ),
+      key: 'type', header: 'TYPE',
+      render: (r) => <span className={`text-xs font-medium ${severityColor[r.severity]}`}>{SEVERITY_LABEL[r.severity] || r.severity}</span>
     },
     {
-      key: 'severity', header: 'Severity',
-      render: (r) => <span className={`text-xs font-medium ${severityColor[r.severity]}`}>{SEVERITY_LABEL[r.severity]}</span>,
+      key: 'status', header: 'STATUS',
+      render: (r) => <span className={`badge ${statusBadge[r.status] ?? 'badge-on_hold'} text-xs`}>{STATUS_LABEL[r.status] ?? r.status}</span>
     },
+    { key: 'tags', header: 'TAGS', render: (r) => <span className="text-xs text-gray-500">—</span> },
+    { key: 'team', header: 'ASSIGNED TEAM', render: (r) => <span className="text-xs text-gray-500">—</span> },
+    { key: 'assignee', header: 'ASSIGNED USER', render: (r) => <span className="text-xs text-gray-900 dark:text-white">{r.assignee_name || '—'}</span> },
+    { key: 'responded', header: 'RESPONDED BY', render: (r) => <span className="text-xs text-gray-500">—</span> },
     {
-      key: 'status', header: 'Status',
-      render: (r) => <span className={`badge ${statusBadge[r.status] ?? 'badge-on_hold'} text-xs`}>{STATUS_LABEL[r.status] ?? r.status}</span>,
+      key: 'due', header: 'DUE DATE',
+      render: (r) => <span className="text-xs text-gray-500">{r.due_date ? new Date(r.due_date).toLocaleDateString('en-IN') : '—'}</span>
     },
+    { key: 'updated', header: 'UPDATED BY', render: (r) => <span className="text-xs text-gray-500">—</span> },
     {
-      key: 'due', header: 'Due Date',
-      render: (r) => <span className="text-xs text-gray-500">{r.due_date ? new Date(r.due_date).toLocaleDateString('en-IN') : '—'}</span>,
-    },
-    {
-      key: 'created', header: 'Created',
-      render: (r) => <span className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString('en-IN')}</span>,
+      key: 'raised', header: 'RAISED AT',
+      render: (r) => <span className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString('en-IN')}</span>
     },
   ];
 
   return (
-    <TabsPageShell
-      title="Issues"
-      description="Track and manage project issues"
-      onAdd={() => setShowAdd(true)}
-      addLabel="Report Issue"
-      filters={
-        <div className="card p-3 flex flex-wrap items-center gap-2">
-          <FilterPills options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} labelMap={STATUS_LABEL} />
-          <FilterPills options={SEVERITY_FILTERS} value={severityFilter} onChange={setSeverityFilter} labelMap={SEVERITY_LABEL} />
-          <div className="relative flex items-center ml-auto">
-            <Search size={13} className="absolute left-3 text-gray-400" />
-            <input className="input pl-8 w-48" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
+    <div className="animate-fade-in">
+      <div className="flex items-center gap-8 mb-6">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Issue Details</h2>
+          <p className="text-sm text-gray-500">{issues.length} Issue</p>
         </div>
-      }
-    >
+
+        <button
+          onClick={() => setIsOverdueFilter(!isOverdueFilter)}
+          className={`text-sm font-medium transition-colors ${isOverdueFilter
+              ? 'text-teal-600 dark:text-teal-400'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+        >
+          Overdue
+        </button>
+      </div>
+
+      <div className="flex justify-end mb-6">
+        <div className="relative flex items-center">
+          <Search
+            size={18}
+            className="text-gray-400 cursor-pointer hover:text-gray-600 dark:hover:text-gray-200"
+            onClick={() => document.getElementById('issue-search')?.focus()}
+          />
+          <input
+            id="issue-search"
+            className="input pl-9 w-64 text-xs opacity-0 focus:opacity-100 transition-opacity absolute right-0"
+            placeholder="Search issues..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => <div key={i} className="skeleton h-12 rounded-2xl" />)}
         </div>
       ) : (
-        <DataTable columns={columns} rows={issues} rowKey={(r) => r.id} emptyMessage="No issues reported" />
+        <DataTable
+          columns={columns}
+          rows={filteredIssues}
+          rowKey={(r) => r.id}
+          emptyMessage="No data"
+        />
       )}
+
+      <button
+        onClick={() => setShowAdd(true)}
+        className="fixed bottom-8 right-8 btn-primary rounded-full p-3 shadow-lg z-10"
+        title="Report Issue"
+      >
+        <Plus size={20} />
+      </button>
 
       {showAdd && (
         <AddIssueModal projectId={id} onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} />
       )}
-    </TabsPageShell>
-  );
-}
-
-function FilterPills<T extends string>({
-  options, value, onChange, labelMap,
-}: {
-  options: readonly T[]; value: T; onChange: (v: T) => void; labelMap: Record<string, string>;
-}) {
-  return (
-    <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
-      {options.map((o) => (
-        <button
-          key={o}
-          onClick={() => onChange(o)}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-            value === o
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-500 dark:text-gray-400'
-          }`}
-        >
-          {labelMap[o] ?? o}
-        </button>
-      ))}
     </div>
   );
 }
