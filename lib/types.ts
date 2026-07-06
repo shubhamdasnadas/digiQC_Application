@@ -1,4 +1,4 @@
-perlexport interface Organization {
+export interface Organization {
   id: string;
   name: string;
   user_limit: number;

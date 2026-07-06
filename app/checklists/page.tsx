@@ -112,7 +112,7 @@ export default function Checklists() {
                   {checklists.map((c, idx) => (
                     <tr
                       key={c.id}
-                      onClick={() => router.push(`/checklists/${c.id}`)}
+                      onClick={() => router.push(`/checklists/${c.id}?name=${encodeURIComponent(c.name)}`)}
                       className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
                     >
                       <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">{idx + 1}</td>
