@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   if (!payload) return response;
 
   try {
-    const { rows } = await orgQuery(payload.orgId!, 'SELECT * FROM teams ORDER BY created_at DESC');
+    const { rows } = await orgQuery(payload.orgId!, 'SELECT * FROM members ORDER BY created_at DESC');
     return NextResponse.json(rows);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
@@ -23,19 +23,22 @@ export async function POST(request: NextRequest) {
     const rows = body.rows ?? [body];
 
     if (body.replace) {
-      await orgQuery(payload.orgId!, 'DELETE FROM teams');
+      await orgQuery(payload.orgId!, 'DELETE FROM members');
     }
 
     for (const row of rows) {
       await orgQuery(payload.orgId!,
-        `INSERT INTO teams (organization_id, name, type, team_lead_name, spoc_name, active_projects, inactive_projects)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO members (organization_id, name, email, phone, access_type, active, default_role, teams, active_projects, inactive_projects)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           payload.orgId,
           row.name,
-          row.type ?? 'inspection',
-          row.team_lead_name ?? '',
-          row.spoc_name ?? '',
+          row.email ?? '',
+          row.phone ?? '',
+          row.access_type ?? '',
+          row.active ?? true,
+          row.default_role ?? '',
+          row.teams ?? '',
           row.active_projects ?? '',
           row.inactive_projects ?? '',
         ]
@@ -52,7 +55,7 @@ export async function DELETE(request: NextRequest) {
   if (!payload) return response;
 
   try {
-    await orgQuery(payload.orgId!, 'DELETE FROM teams');
+    await orgQuery(payload.orgId!, 'DELETE FROM members');
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

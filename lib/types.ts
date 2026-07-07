@@ -51,6 +51,23 @@ export interface Team {
   type: string;
   team_lead_name: string;
   spoc_name: string;
+  active_projects: string;
+  inactive_projects: string;
+  created_at: string;
+}
+
+export interface Member {
+  id: string;
+  organization_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  access_type: string;
+  active: boolean;
+  default_role: string;
+  teams: string;
+  active_projects: string;
+  inactive_projects: string;
   created_at: string;
 }
 
