@@ -1,12 +1,48 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Plus, X, Loader2, Upload, ChevronDown, FileDown, Download } from 'lucide-react';
+import { Users, Plus, X, Loader2, Upload, ChevronDown, FileDown, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import { exportToXlsx } from '@/lib/excelExport';
 import type { Team, Organization, Member } from '@/lib/types';
+
+const TEAMS_PAGE_SIZE = 10;
+const MEMBERS_PAGE_SIZE = 5;
+
+function Pagination({ page, totalItems, pageSize, onPageChange }: { page: number; totalItems: number; pageSize: number; onPageChange: (page: number) => void }) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  if (totalPages <= 1) return null;
+  const start = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, totalItems);
+  return (
+    <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-gray-800">
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Showing {start}–{end} of {totalItems}
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <span className="text-xs text-gray-600 dark:text-gray-300 px-2">
+          Page {page} of {totalPages}
+        </span>
+        <button
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function Teams() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -19,6 +55,8 @@ export default function Teams() {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [form, setForm] = useState({ organization_id: '', name: '', type: 'inspection', team_lead_name: '', spoc_name: '' });
   const [saving, setSaving] = useState(false);
+  const [teamsPage, setTeamsPage] = useState(1);
+  const [membersPage, setMembersPage] = useState(1);
 
   const load = async () => {
     try {
@@ -88,6 +126,20 @@ export default function Teams() {
   const membersOfTeam = (team: Team) =>
     (Array.isArray(members) ? members : []).filter(m => (m.teams || '').split(',').map(s => s.trim().toLowerCase()).includes(team.name.trim().toLowerCase()));
 
+  const teamsTotalPages = Math.max(1, Math.ceil(teams.length / TEAMS_PAGE_SIZE));
+  const teamsPageClamped = Math.min(teamsPage, teamsTotalPages);
+  const paginatedTeams = teams.slice((teamsPageClamped - 1) * TEAMS_PAGE_SIZE, teamsPageClamped * TEAMS_PAGE_SIZE);
+
+  const selectedTeamMembers = selectedTeam ? membersOfTeam(selectedTeam) : [];
+  const membersTotalPages = Math.max(1, Math.ceil(selectedTeamMembers.length / MEMBERS_PAGE_SIZE));
+  const membersPageClamped = Math.min(membersPage, membersTotalPages);
+  const paginatedMembers = selectedTeamMembers.slice((membersPageClamped - 1) * MEMBERS_PAGE_SIZE, membersPageClamped * MEMBERS_PAGE_SIZE);
+
+  const handleSelectTeam = (t: Team) => {
+    setSelectedTeam(t);
+    setMembersPage(1);
+  };
+
   const exportRows = () => teams.map(t => ({
     Name: t.name,
     Type: t.type,
@@ -133,10 +185,10 @@ export default function Teams() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {teams.map(t => (
+                      {paginatedTeams.map(t => (
                         <tr
                           key={t.id}
-                          onClick={() => setSelectedTeam(t)}
+                          onClick={() => handleSelectTeam(t)}
                           className={`cursor-pointer transition-colors ${selectedTeam?.id === t.id ? 'bg-teal-50 dark:bg-teal-500/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
                         >
                           <td className="px-5 py-3 text-gray-900 dark:text-white font-medium">{t.name}</td>
@@ -165,16 +217,26 @@ export default function Teams() {
                   </table>
                 </div>
               )}
+              <Pagination page={teamsPageClamped} totalItems={teams.length} pageSize={TEAMS_PAGE_SIZE} onPageChange={setTeamsPage} />
             </div>
           )}
         </div>
         <div>
+          <div className="invisible flex items-center justify-between flex-wrap gap-3 mb-6" aria-hidden="true">
+            <p className="text-sm">{teams.length} teams configured</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button className="btn-secondary"><FileDown size={15} /> Template</button>
+              <button className="btn-secondary"><Upload size={15} /> Import</button>
+              <button className="btn-secondary"><Download size={15} /> Export XLSX</button>
+              <button className="btn-primary"><Plus size={15} /> Add Team</button>
+            </div>
+          </div>
           {selectedTeam ? (
             <div className="card">
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-white">{selectedTeam.name}</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{membersOfTeam(selectedTeam).length} member{membersOfTeam(selectedTeam).length === 1 ? '' : 's'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{selectedTeamMembers.length} member{selectedTeamMembers.length === 1 ? '' : 's'}</p>
                 </div>
                 <button
                   onClick={() => setSelectedTeam(null)}
@@ -184,10 +246,10 @@ export default function Teams() {
                 </button>
               </div>
               <div className="max-h-[32rem] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-                {membersOfTeam(selectedTeam).length === 0 ? (
+                {selectedTeamMembers.length === 0 ? (
                   <p className="p-5 text-sm text-gray-500 dark:text-gray-400">No members found for this team.</p>
                 ) : (
-                  membersOfTeam(selectedTeam).map(m => (
+                  paginatedMembers.map(m => (
                     <div key={m.id} className="p-4 flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{m.name}</p>
@@ -202,6 +264,7 @@ export default function Teams() {
                   ))
                 )}
               </div>
+              <Pagination page={membersPageClamped} totalItems={selectedTeamMembers.length} pageSize={MEMBERS_PAGE_SIZE} onPageChange={setMembersPage} />
             </div>
           ) : (
             <div className="card p-10 flex flex-col items-center justify-center text-center text-gray-400 dark:text-gray-500">
