@@ -21,19 +21,24 @@ export default function Teams() {
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
-    const [tRes, oRes, mRes] = await Promise.all([
-      fetch('/api/teams'),
-      fetch('/api/organizations'),
-      fetch('/api/members'),
-    ]);
-    const t = await tRes.json();
-    const o = await oRes.json();
-    const m = await mRes.json();
-    setTeams(t);
-    setOrgs(o);
-    setMembers(m);
-    if (o.length > 0) setForm(f => ({ ...f, organization_id: o[0].id }));
-    setLoading(false);
+    try {
+      const [tRes, oRes, mRes] = await Promise.all([
+        fetch('/api/teams'),
+        fetch('/api/organizations'),
+        fetch('/api/members'),
+      ]);
+      const t = await tRes.json();
+      const o = await oRes.json();
+      const m = await mRes.json();
+      setTeams(Array.isArray(t) ? t : []);
+      setOrgs(Array.isArray(o) ? o : []);
+      setMembers(Array.isArray(m) ? m : []);
+      if (Array.isArray(o) && o.length > 0) setForm(f => ({ ...f, organization_id: o[0].id }));
+    } catch (err) {
+      console.error('Failed to load teams data:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -74,14 +79,14 @@ export default function Teams() {
 
   const typeColors: Record<string, string> = { inspection: 'badge-active', audit: 'badge-completed', compliance: 'badge-on_hold' };
 
-  const formatProjectList = (value: string, visible: number = 3) => {
-    const items = value.split(',').map(s => s.trim()).filter(Boolean);
+  const formatProjectList = (value: string | null | undefined, visible: number = 3) => {
+    const items = (value || '').split(',').map(s => s.trim()).filter(Boolean);
     if (items.length <= visible) return items.join(', ') || '—';
     return `${items.slice(0, visible).join(', ')} + ${items.length - visible} others`;
   };
 
   const membersOfTeam = (team: Team) =>
-    members.filter(m => m.teams.split(',').map(s => s.trim().toLowerCase()).includes(team.name.trim().toLowerCase()));
+    (Array.isArray(members) ? members : []).filter(m => (m.teams || '').split(',').map(s => s.trim().toLowerCase()).includes(team.name.trim().toLowerCase()));
 
   const exportRows = () => teams.map(t => ({
     Name: t.name,
