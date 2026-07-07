@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS teams (
   type text DEFAULT 'inspection',
   team_lead_name text DEFAULT '',
   spoc_name text DEFAULT '',
+  active_projects text DEFAULT '',
+  inactive_projects text DEFAULT '',
   created_at timestamptz DEFAULT now()
 );
 

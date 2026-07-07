@@ -5,9 +5,10 @@
  * 
  * This creates:
  * 1. All required database tables
- * 2. A demo user (admin@digiqc.com / password123)
- * 3. Two demo organizations with data
- * 4. Org schemas with sample projects, teams, checklists
+ * 2. A demo admin user (admin@digiqc.com / password123)
+ * 3. A demo member user with normal access to City Hospital (member@digiqc.com / password123)
+ * 4. Two demo organizations with data
+ * 5. Org schemas with sample projects, teams, checklists
  */
 
 const { Pool } = require('pg');
@@ -97,7 +98,7 @@ async function seed() {
       BEGIN
         schema_name := public.org_schema_name(org_id);
         EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', schema_name);
-        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.teams (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid NOT NULL, name text NOT NULL, type text DEFAULT ''inspection'', team_lead_name text DEFAULT '''', spoc_name text DEFAULT '''', created_at timestamptz DEFAULT now())', schema_name);
+        EXECUTE format('CREATE TABLE IF NOT EXISTS %I.teams (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid NOT NULL, name text NOT NULL, type text DEFAULT ''inspection'', team_lead_name text DEFAULT '''', spoc_name text DEFAULT '''', active_projects text DEFAULT '''', inactive_projects text DEFAULT '''', created_at timestamptz DEFAULT now())', schema_name);
         EXECUTE format('CREATE TABLE IF NOT EXISTS %I.projects (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid NOT NULL, name text NOT NULL, nomenclature text DEFAULT '''', instruction text DEFAULT '''', profile text DEFAULT '''', image_url text DEFAULT '''', status text DEFAULT ''active'', created_at timestamptz DEFAULT now())', schema_name);
         EXECUTE format('CREATE TABLE IF NOT EXISTS %I.checklists (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL, name text NOT NULL, created_at timestamptz DEFAULT now())', schema_name);
         EXECUTE format('CREATE TABLE IF NOT EXISTS %I.checklist_stages (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), checklist_id uuid NOT NULL, sr_no integer NOT NULL DEFAULT 1, name text NOT NULL, created_at timestamptz DEFAULT now())', schema_name);
@@ -133,6 +134,33 @@ async function seed() {
             );
             userId = userRows[0].id;
             console.log('  Created demo user: admin@digiqc.com / password123');
+        }
+
+        // ================================================================
+        // 3b. Create DEMO MEMBER USER (normal access)
+        // ================================================================
+        console.log('Creating demo member user...');
+
+        const memberPasswordHash = await bcrypt.hash('password123', 12);
+
+        const { rows: existingMemberUser } = await client.query(
+            'SELECT id FROM public.users WHERE email = $1',
+            ['member@digiqc.com']
+        );
+
+        let memberUserId;
+        if (existingMemberUser.length > 0) {
+            memberUserId = existingMemberUser[0].id;
+            console.log('  Demo member user already exists (member@digiqc.com)');
+        } else {
+            const { rows: memberUserRows } = await client.query(
+                `INSERT INTO public.users (name, email, password_hash)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+                ['Priya Singh', 'member@digiqc.com', memberPasswordHash]
+            );
+            memberUserId = memberUserRows[0].id;
+            console.log('  Created demo member user: member@digiqc.com / password123');
         }
 
         // ================================================================
@@ -201,6 +229,20 @@ async function seed() {
                 );
                 console.log(`  Added user to ${orgId === org1Id ? 'City Hospital' : 'Green Build Corp'} as admin`);
             }
+        }
+
+        // Add demo member user to City Hospital only, as a normal (member) user
+        const { rows: existingMemberOrgMember } = await client.query(
+            'SELECT id FROM public.org_members WHERE user_id = $1 AND organization_id = $2',
+            [memberUserId, org1Id]
+        );
+        if (existingMemberOrgMember.length === 0) {
+            await client.query(
+                `INSERT INTO public.org_members (user_id, organization_id, role, status)
+         VALUES ($1, $2, 'member', 'active')`,
+                [memberUserId, org1Id]
+            );
+            console.log('  Added member user to City Hospital as member');
         }
 
         // ================================================================
@@ -311,8 +353,9 @@ async function seed() {
         console.log('\n✅ Seed complete!');
         console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('  Login Credentials:');
-        console.log('  Email:    admin@digiqc.com');
-        console.log('  Password: password123');
+        console.log('  Admin  — Email: admin@digiqc.com  Password: password123');
+        console.log('  Member — Email: member@digiqc.com Password: password123');
+        console.log('  (Member has normal, non-admin access to City Hospital only)');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('\nOrganizations created:');
         console.log('  1. City Hospital');

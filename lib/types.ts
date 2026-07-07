@@ -51,6 +51,8 @@ export interface Team {
   type: string;
   team_lead_name: string;
   spoc_name: string;
+  active_projects: string;
+  inactive_projects: string;
   created_at: string;
 }
 
