@@ -149,20 +149,20 @@ A multi-tenant B2B SaaS for construction/engineering QC (quality control) inspec
 
 ---
 
-## 5. Design System (for visual/UX parity — adapt to native idioms, don't copy 1:1)
+## 5. Design System (for visual/UX parity — adapt to RN idioms, don't copy 1:1)
 
-- **Brand color**: custom teal (50–950 scale) as primary accent; secondary semantic colors: blue (info/"completed"), amber ("on_hold"/warning), rose/red (destructive/error), neutral gray (backgrounds/text).
-- **Dark mode**: full parity dark/light theming, defaults to dark, user-toggleable, persisted.
-- **Font**: Inter.
-- **Core reusable visual patterns** (currently Tailwind utility classes, `.card`/`.btn-primary`/`.btn-secondary`/`.badge-*`/`.input`/`.skeleton`) — map to native equivalents:
-  - **Card**: elevated rounded surface, subtle shadow, optional hover-lift.
-  - **Primary/Secondary buttons**: solid-teal-with-glow vs. neutral-gray.
+- **Brand color**: custom teal (50–950 scale) as primary accent; secondary semantic colors: blue (info/"completed"), amber ("on_hold"/warning), rose/red (destructive/error), neutral gray (backgrounds/text). These are plain hex/Tailwind tokens and can be lifted directly into an RN theme object regardless of styling approach chosen.
+- **Dark mode**: full parity dark/light theming, defaults to dark, user-toggleable, persisted (RN equivalent: `useColorScheme` + a persisted override, e.g. via `AsyncStorage`, mirroring the existing `ThemeContext` logic).
+- **Font**: Inter (available as a loadable font family in RN via `@expo-google-fonts/inter` or bundled font assets).
+- **Core reusable visual patterns** (currently Tailwind utility classes, `.card`/`.btn-primary`/`.btn-secondary`/`.badge-*`/`.input`/`.skeleton`) — recreate as shared RN components/style tokens (e.g. via NativeWind classes, a theme file, or styled-components), not native Android widgets:
+  - **Card**: elevated rounded surface, subtle shadow, optional press-feedback (mobile has no hover — use press/active states instead).
+  - **Primary/Secondary buttons**: solid-teal-with-glow vs. neutral-gray — `Pressable`-based components with the same two visual variants.
   - **Status badges/chips**: 3 semantic colors keyed to entity status enums (active=teal, completed=blue, on_hold=amber; also severity/type badges reuse this pattern).
-  - **Standard text field**: light gray fill, rounded, teal focus ring.
-  - **Skeleton loading placeholders**: pulsing gray blocks shown while data loads.
-- **Modal pattern** (used everywhere — Add/Edit forms): full-screen dim+blur backdrop (click to dismiss), centered card, header with title + close (X), form body, Cancel/Submit button pair at bottom, submit button shows spinner + disabled while saving.
-- **Master-detail / two-pane pattern**: seen in the Checklist builder (stages list ↔ checkpoints panel) and now also the Teams page (team list ↔ member panel) — left list with selectable rows highlighting the active selection, right pane showing detail or an empty-state prompt ("Select X to view Y").
-- **Bulk import/export pattern**: reused across Organizations, Teams, Projects, Checklists — file picker → parse → per-row success/failure summary with an inline error list → retry/done. Also a "download sample template" affordance per entity type showing exact expected columns.
+  - **Standard text field**: light gray fill, rounded, teal focus ring (RN: `TextInput` with focus-state styling).
+  - **Skeleton loading placeholders**: pulsing gray blocks shown while data loads (RN: an animated `Animated.View` opacity pulse or a library like `react-native-skeleton-placeholder`).
+- **Modal pattern** (used everywhere — Add/Edit forms): full-screen dim+blur backdrop (tap to dismiss), centered card, header with title + close (X), form body, Cancel/Submit button pair at bottom, submit button shows spinner + disabled while saving. Maps directly to RN's `Modal` component or a bottom-sheet library (e.g. `@gorhom/bottom-sheet`) — consider whether modals should become bottom sheets on mobile for better ergonomics, since that's a common web→mobile adaptation.
+- **Master-detail / two-pane pattern**: seen in the Checklist builder (stages list ↔ checkpoints panel) and now also the Teams page (team list ↔ member panel) — left list with selectable rows highlighting the active selection, right pane showing detail or an empty-state prompt ("Select X to view Y"). On a phone-sized screen this two-pane layout won't fit side-by-side — plan to convert it to **drill-down navigation** (tap a row → push a detail screen) rather than a persistent split view, unless targeting tablets specifically.
+- **Bulk import/export pattern**: reused across Organizations, Teams, Projects, Checklists — file picker → parse → per-row success/failure summary with an inline error list → retry/done. Also a "download sample template" affordance per entity type showing exact expected columns. `xlsx-js-style` (the web parsing lib) is not RN-compatible — use a React Native-compatible spreadsheet parser (e.g. `react-native-xlsx`/`ssf`-based alternatives) with `react-native-document-picker`, or move parsing server-side and have the app just upload the raw file.
 
 ---
 
@@ -170,23 +170,23 @@ A multi-tenant B2B SaaS for construction/engineering QC (quality control) inspec
 
 1. **Google Maps location picker is commented out/non-functional** in both places it's used (`/projects/new`, edit modal) — only manual lat/lng entry currently works.
 2. **Nomenclature project tab** is referenced in the tab bar but has no page/route/API — would 404 if clicked.
-3. **Two parallel team↔project association mechanisms**: normalized `project_teams` join table (used by the project's Teams tab) vs. free-text `active_projects`/`inactive_projects` strings on the Team entity (used by the org-level Teams page/export). Pick one canonical model for Android.
+3. **Two parallel team↔project association mechanisms**: normalized `project_teams` join table (used by the project's Teams tab) vs. free-text `active_projects`/`inactive_projects` strings on the Team entity (used by the org-level Teams page/export). Pick one canonical model for the rebuild.
 4. **Team "members" feature is dummy data only** — no real `team_members` table/API exists yet (see §4.5).
 5. **Dashboard "Recent Activity" feed is hardcoded mock data**, not backed by any real activity/audit log.
 6. **Several UI affordances exist visually but aren't wired to any handler**: Edit/Copy/Delete icons on the Checklists list and inside the Checklist builder; Import/Export/Edit buttons on the checklist detail header; "Bulk Items" button; "Stage Requirements" checkboxes in the builder (not persisted); photo/remark table icons in the checkpoint table (static, not data-bound); "My Role" column on Projects list (always "—"); "My Activities"/"Settings" buttons in project header; Header search box; notification bell; checklist builder pagination controls.
-7. **No server-side role/permission enforcement** on mutating endpoints beyond "is authenticated" — org-level and project-level roles are currently UI-only gating. The Android backend should likely enforce these properly.
+7. **No server-side role/permission enforcement** on mutating endpoints beyond "is authenticated" — org-level and project-level roles are currently UI-only gating. The backend should likely enforce these properly regardless of client platform.
 8. **Organizations API has no auth guard at all** (open endpoint) — a gap, not a pattern.
 9. **Schema-per-org is keyed by org *name***, not org id — renaming an org doesn't rename its schema (drift risk). Consider keying by immutable id in a new backend.
 10. **Cascade-delete asymmetry**: deleting a project cascades to most child tables but not to checklists/stages/checkpoints (see §2.2).
-11. **Rich-text checkpoint question field** uses deprecated browser APIs (`contentEditable`/`execCommand`) — needs a genuinely native equivalent, not a literal port.
+11. **Rich-text checkpoint question field** uses deprecated browser APIs (`contentEditable`/`execCommand`) — needs a genuine RN rich-text library, not a literal port.
 12. **Register tab "file"** is just a URL text field — no real file upload/storage integration exists to port.
 13. **Checklist import hardcodes association to the first project in the org's project list** — not real per-project targeting logic.
 
 ---
 
-## 7. Suggested Reading Order for the Android Rebuild Agent
+## 7. Suggested Reading Order for the React Native Rebuild Agent
 
-1. §2 (data model) + §3 (auth) — get the domain and session model straight first.
-2. §4.6 (Projects) and §4.7 (Checklists) — the two richest, most central feature areas (EQC execution vs. checklist template authoring).
+1. §2 (data model) + §3 (auth) — get the domain and session model straight first, and decide on token storage/transport for RN (secure storage + `Authorization` header vs. reusing cookies).
+2. §4.6 (Projects) and §4.7 (Checklists) — the two richest, most central feature areas (EQC execution vs. checklist template authoring), and the ones with the most web-only APIs needing RN replacements (maps, drag-and-drop, rich text).
 3. §6 (known gaps) — decide up front which stubs to build for real, which to drop, and which data-model inconsistencies to resolve rather than copy.
-4. §5 (design system) — for visual/UX tone, translated to native Android idioms (Material Design), not copied literally.
+4. §5 (design system) — for visual/UX tone and to pick a styling approach (NativeWind vs. a component library vs. hand-rolled `StyleSheet`), and to identify which layouts (esp. two-pane master-detail) need rethinking for phone-sized screens.

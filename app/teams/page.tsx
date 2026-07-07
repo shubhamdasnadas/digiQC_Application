@@ -6,27 +6,32 @@ import ImportModal from '@/components/ImportModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import { exportToXlsx } from '@/lib/excelExport';
-import type { Team, Organization } from '@/lib/types';
+import type { Team, Organization, Member } from '@/lib/types';
 
 export default function Teams() {
   const [teams, setTeams] = useState<Team[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showTable, setShowTable] = useState(true);
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [form, setForm] = useState({ organization_id: '', name: '', type: 'inspection', team_lead_name: '', spoc_name: '' });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
-    const [tRes, oRes] = await Promise.all([
+    const [tRes, oRes, mRes] = await Promise.all([
       fetch('/api/teams'),
       fetch('/api/organizations'),
+      fetch('/api/members'),
     ]);
     const t = await tRes.json();
     const o = await oRes.json();
+    const m = await mRes.json();
     setTeams(t);
     setOrgs(o);
+    setMembers(m);
     if (o.length > 0) setForm(f => ({ ...f, organization_id: o[0].id }));
     setLoading(false);
   };
@@ -75,6 +80,9 @@ export default function Teams() {
     return `${items.slice(0, visible).join(', ')} + ${items.length - visible} others`;
   };
 
+  const membersOfTeam = (team: Team) =>
+    members.filter(m => m.teams.split(',').map(s => s.trim().toLowerCase()).includes(team.name.trim().toLowerCase()));
+
   const exportRows = () => teams.map(t => ({
     Name: t.name,
     Type: t.type,
@@ -121,7 +129,11 @@ export default function Teams() {
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {teams.map(t => (
-                        <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                        <tr
+                          key={t.id}
+                          onClick={() => setSelectedTeam(t)}
+                          className={`cursor-pointer transition-colors ${selectedTeam?.id === t.id ? 'bg-teal-50 dark:bg-teal-500/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
+                        >
                           <td className="px-5 py-3 text-gray-900 dark:text-white font-medium">{t.name}</td>
                           <td className="px-5 py-3"><span className={`badge ${typeColors[t.type] ?? 'badge-active'} capitalize text-xs`}>{t.type}</span></td>
                           <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{t.team_lead_name || '—'}</td>
@@ -151,7 +163,48 @@ export default function Teams() {
             </div>
           )}
         </div>
-        <div />
+        <div>
+          {selectedTeam ? (
+            <div className="card">
+              <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">{selectedTeam.name}</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{membersOfTeam(selectedTeam).length} member{membersOfTeam(selectedTeam).length === 1 ? '' : 's'}</p>
+                </div>
+                <button
+                  onClick={() => setSelectedTeam(null)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="max-h-[32rem] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+                {membersOfTeam(selectedTeam).length === 0 ? (
+                  <p className="p-5 text-sm text-gray-500 dark:text-gray-400">No members found for this team.</p>
+                ) : (
+                  membersOfTeam(selectedTeam).map(m => (
+                    <div key={m.id} className="p-4 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{m.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{m.email}</p>
+                        {m.phone && <p className="text-xs text-gray-500 dark:text-gray-400">{m.phone}</p>}
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className={`badge ${m.active ? 'badge-active' : 'badge-on_hold'} text-xs`}>{m.active ? 'Active' : 'Inactive'}</span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{m.access_type}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="card p-10 flex flex-col items-center justify-center text-center text-gray-400 dark:text-gray-500">
+              <Users size={28} className="mb-3 opacity-50" />
+              <p className="text-sm">Click a team on the left to view its members</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {showAdd && (

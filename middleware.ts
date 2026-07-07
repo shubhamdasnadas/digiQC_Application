@@ -24,7 +24,7 @@ function getTokenFromCookie(header: string): string | null {
 }
 
 // Routes that don't require authentication
-const publicRoutes = ['/login', '/register'];
+const publicRoutes = ['/login', '/register', '/register/verify-otp', '/login/verify-otp'];
 
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;

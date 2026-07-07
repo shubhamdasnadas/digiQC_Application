@@ -40,6 +40,22 @@ CREATE TABLE IF NOT EXISTS teams (
   created_at timestamptz DEFAULT now()
 );
 
+-- Members
+CREATE TABLE IF NOT EXISTS members (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  email text DEFAULT '',
+  phone text DEFAULT '',
+  access_type text DEFAULT '',
+  active boolean DEFAULT true,
+  default_role text DEFAULT '',
+  teams text DEFAULT '',
+  active_projects text DEFAULT '',
+  inactive_projects text DEFAULT '',
+  created_at timestamptz DEFAULT now()
+);
+
 -- Projects
 CREATE TABLE IF NOT EXISTS projects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
