@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
+import { ensureProjectSchema } from '@/lib/projectSchema';
 
 /**
  * GET /api/projects
@@ -12,6 +13,8 @@ import { orgQuery } from '@/lib/db';
 export async function GET(request: NextRequest) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
+
+  await ensureProjectSchema(payload.orgId!);
 
   try {
     const { searchParams } = new URL(request.url);
@@ -75,6 +78,8 @@ export async function POST(request: NextRequest) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
 
+  await ensureProjectSchema(payload.orgId!);
+
   try {
     const body = await request.json();
     const rows = body.rows ?? [body];
@@ -131,6 +136,8 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
+
+  await ensureProjectSchema(payload.orgId!);
 
   try {
     const { searchParams } = new URL(request.url);
@@ -195,6 +202,8 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
+
+  await ensureProjectSchema(payload.orgId!);
 
   try {
     const { searchParams } = new URL(request.url);
