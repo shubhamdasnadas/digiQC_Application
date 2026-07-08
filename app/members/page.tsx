@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { Users, Plus, X, Loader2, Upload, ChevronDown, FileDown, Download, Search, Edit2, MoreVertical } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
-import AddMemberModal from '@/components/AddMemberModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import { exportToXlsx } from '@/lib/excelExport';
@@ -205,21 +204,55 @@ export default function Members() {
         </div>
       )}
 
-       {showImport && (
-         <ImportModal
-           isOpen={showImport}
-           onClose={() => { setShowImport(false); load(); }}
-           title="Import Members"
-           description="Upload an Excel or CSV file with columns: Name, Email, Phone No, Access Type, Active, Default Role, Team, Active Assigned Projects, Inactive Assigned Projects"
-           onImport={handleImport}
-         />
-       )}
+      {showImport && (
+        <ImportModal
+          isOpen={showImport}
+          onClose={() => { setShowImport(false); load(); }}
+          title="Import Members"
+          description="Upload an Excel or CSV file with columns: Name, Email, Phone No, Access Type, Active, Default Role, Team, Active Assigned Projects, Inactive Assigned Projects"
+          onImport={handleImport}
+        />
+      )}
 
-       <AddMemberModal 
-         isOpen={showAdd} 
-         onClose={() => setShowAdd(false)} 
-         onSuccess={() => { load(); }} 
-       />
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 glass" onClick={() => setShowAdd(false)} />
+          <div className="relative card w-full max-w-md p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Member</h2>
+              <button onClick={() => setShowAdd(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
+            </div>
+            <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); setShowAdd(false); }}>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Full Name *</label>
+                <input required className="input" placeholder="John Doe" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Email</label>
+                <input className="input" type="email" placeholder="john@example.com" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Access Type</label>
+                  <select className="input text-xs">
+                    <option value="User">User</option>
+                    <option value="Admin">Admin</option>
+                    <option value="Viewer">Viewer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Role</label>
+                  <input className="input" placeholder="QC Engineer" />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setShowAdd(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
+                <button type="submit" className="btn-primary flex-1 justify-center">Save Member</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
