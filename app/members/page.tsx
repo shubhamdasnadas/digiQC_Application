@@ -167,7 +167,17 @@ export default function Members() {
                     <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{idx + 1}</td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900 dark:text-white">{m.name}</span>
+                        <div className="relative group inline-block">
+                          <span className="font-medium text-gray-900 dark:text-white underline decoration-dotted decoration-gray-400 underline-offset-2 cursor-default">{m.name}</span>
+                          {(m.email || m.phone) && (
+                            <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-56 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 origin-top-left">
+                              <div className="rounded-lg bg-gray-900 dark:bg-gray-800 text-white text-xs leading-relaxed p-3 shadow-xl border border-gray-800 dark:border-gray-700 space-y-1">
+                                {m.email && <p className="truncate"> Email: {m.email}</p>}
+                                {m.phone && <p> Phone: {m.phone}</p>}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.access_type === 'Paid' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>{m.access_type || '—'}</span>
                       </div>
                     </td>
