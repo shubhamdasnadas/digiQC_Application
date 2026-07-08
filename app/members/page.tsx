@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Users, Plus, X, Loader2, Upload, ChevronDown, FileDown, Download, Search, Edit2, MoreVertical } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
+import AddMemberModal from '@/components/AddMemberModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import { exportToXlsx } from '@/lib/excelExport';
@@ -17,9 +18,9 @@ export default function Members() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAccessType, setFilterAccessType] = useState('All');
   const [filterTeam, setFilterTeam] = useState('All');
-  const [saving, setSaving] = useState(false);
 
   const load = async () => {
+    setLoading(true);
     try {
       const [mRes, oRes] = await Promise.all([
         fetch('/api/members'),
@@ -92,28 +93,48 @@ export default function Members() {
   return (
     <div className="p-6 animate-fade-in">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Members</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {members.length} users configured
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-teal-500/10 rounded-2xl text-teal-600">
+            <Users size={24} />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Members</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {members.length} users configured in this organization
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2"><Plus size={15} /> Add</button>
-          <button onClick={() => setShowImport(true)} className="btn-secondary flex items-center gap-2"><Upload size={15} /> Import</button>
-          <button onClick={() => exportRows().length && exportToXlsx(exportRows(), 'digiqc-members')} className="btn-secondary flex items-center gap-2"><Download size={15} /> Export</button>
+          <button 
+            onClick={() => setShowAdd(true)} 
+            className="btn-primary flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-full hover:bg-orange-600 transition-all shadow-lg shadow-orange-200"
+          >
+            <Plus size={15} /> Add Member
+          </button>
+          <button 
+            onClick={() => setShowImport(true)} 
+            className="btn-secondary flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
+          >
+            <Upload size={15} /> Import
+          </button>
+          <button 
+            onClick={() => exportRows().length && exportToXlsx(exportRows(), 'digiqc-members')} 
+            className="btn-secondary flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
+          >
+            <Download size={15} /> Export
+          </button>
         </div>
       </div>
 
-      <div className="card p-4 mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="card p-4 mb-6 flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
             <select 
-              className="input pl-8 text-xs" 
+              className="input pl-8 pr-4 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-orange-500" 
               value={filterAccessType} 
               onChange={e => setFilterAccessType(e.target.value)}
             >
-              <option value="All">Access Type</option>
+              <option value="All">All Access Types</option>
               <option value="Admin">Admin</option>
               <option value="User">User</option>
               <option value="Viewer">Viewer</option>
@@ -122,11 +143,11 @@ export default function Members() {
           </div>
           <div className="relative">
             <select 
-              className="input pl-8 text-xs" 
+              className="input pl-8 pr-4 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-orange-500" 
               value={filterTeam} 
               onChange={e => setFilterTeam(e.target.value)}
             >
-              <option value="All">Team</option>
+              <option value="All">All Teams</option>
               {Array.from(new Set(members.flatMap(m => (m.teams || '').split(',').map(s => s.trim()).filter(Boolean)))).map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
@@ -138,28 +159,33 @@ export default function Members() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input 
             type="text" 
-            placeholder="Search members..." 
-            className="input pl-9 text-xs" 
+            placeholder="Search members by name or email..." 
+            className="input pl-9 pr-4 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-orange-500" 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
 
-      {!loading && (
-        <div className="card overflow-hidden">
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Loader2 size={32} className="text-orange-500 animate-spin" />
+          <p className="text-sm text-gray-500">Loading members list...</p>
+        </div>
+      ) : (
+        <div className="card overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
-                <tr>
-                  <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">#</th>
-                  <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">USER</th>
-                  <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">STATUS</th>
-                  <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">ROLE</th>
-                  <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">ASSIGNED TEAM</th>
-                  <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">ASSIGNED PROJECTS</th>
-                  <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">COUNT</th>
-                  <th className="px-5 py-3 text-right font-medium text-gray-600 dark:text-gray-400">ACTIONS</th>
+                <tr className="text-gray-600 dark:text-gray-400">
+                  <th className="px-5 py-3 text-left font-medium">#</th>
+                  <th className="px-5 py-3 text-left font-medium">USER</th>
+                  <th className="px-5 py-3 text-left font-medium">STATUS</th>
+                  <th className="px-5 py-3 text-left font-medium">ROLE</th>
+                  <th className="px-5 py-3 text-left font-medium">ASSIGNED TEAM</th>
+                  <th className="px-5 py-3 text-left font-medium">ASSIGNED PROJECTS</th>
+                  <th className="px-5 py-3 text-left font-medium">COUNT</th>
+                  <th className="px-5 py-3 text-right font-medium">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -195,7 +221,7 @@ export default function Members() {
                 ))}
                 {filteredMembers.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-5 py-10 text-center text-gray-500 dark:text-gray-400">No members found.</td>
+                    <td colSpan={8} className="px-5 py-10 text-center text-gray-500 dark:text-gray-400">No members found matching your criteria.</td>
                   </tr>
                 )}
               </tbody>
@@ -204,55 +230,21 @@ export default function Members() {
         </div>
       )}
 
-      {showImport && (
-        <ImportModal
-          isOpen={showImport}
-          onClose={() => { setShowImport(false); load(); }}
-          title="Import Members"
-          description="Upload an Excel or CSV file with columns: Name, Email, Phone No, Access Type, Active, Default Role, Team, Active Assigned Projects, Inactive Assigned Projects"
-          onImport={handleImport}
-        />
-      )}
+       {showImport && (
+         <ImportModal
+           isOpen={showImport}
+           onClose={() => { setShowImport(false); load(); }}
+           title="Import Members"
+           description="Upload an Excel or CSV file with columns: Name, Email, Phone No, Access Type, Active, Default Role, Team, Active Assigned Projects, Inactive Assigned Projects"
+           onImport={handleImport}
+         />
+       )}
 
-      {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 glass" onClick={() => setShowAdd(false)} />
-          <div className="relative card w-full max-w-md p-6 animate-scale-in">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Member</h2>
-              <button onClick={() => setShowAdd(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
-            </div>
-            <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); setShowAdd(false); }}>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Full Name *</label>
-                <input required className="input" placeholder="John Doe" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Email</label>
-                <input className="input" type="email" placeholder="john@example.com" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Access Type</label>
-                  <select className="input text-xs">
-                    <option value="User">User</option>
-                    <option value="Admin">Admin</option>
-                    <option value="Viewer">Viewer</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Role</label>
-                  <input className="input" placeholder="QC Engineer" />
-                </div>
-              </div>
-              <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => setShowAdd(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
-                <button type="submit" className="btn-primary flex-1 justify-center">Save Member</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+       <AddMemberModal 
+         isOpen={showAdd} 
+         onClose={() => setShowAdd(false)} 
+         onSuccess={() => { load(); }} 
+       />
     </div>
   );
 }
