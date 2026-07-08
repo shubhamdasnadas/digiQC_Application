@@ -5,25 +5,22 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
     ArrowLeft,
     Plus,
-    Download,
-    Upload,
-    Edit3,
     GripVertical,
     Trash2,
     Pencil,
     CheckCircle2,
-    XCircle
+    XCircle,
+    Rocket
 } from 'lucide-react';
 import { Checklist, ChecklistStage, Checkpoint } from '@/lib/types';
 import StageFormModal from '@/components/StageFormModal';
 import CheckpointFormModal from '@/components/CheckpointFormModal';
-import EditChecklistModal from '@/components/EditChecklistModal';
 
-export default function ChecklistDetail() {
+export default function ProjectChecklistDetail() {
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const id = params.id as string;
+    const checklistId = params.checklistId as string;
     const initialName = searchParams.get('name');
 
     const [checklist, setChecklist] = useState<Checklist | null>(null);
@@ -32,22 +29,19 @@ export default function ChecklistDetail() {
     const [activeStageId, setActiveStageId] = useState<string | null>(null);
     const [isStageModalOpen, setIsStageModalOpen] = useState(false);
     const [isCheckpointModalOpen, setIsCheckpointModalOpen] = useState(false);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/checklists/${id}`);
+            const res = await fetch(`/api/checklists/${checklistId}`);
             if (!res.ok) throw new Error('Failed to fetch checklist');
             const data = await res.json();
 
             setChecklist(data);
             setStages(data.stages);
             setCheckpoints(data.checkpoints);
-            // Removed auto-selection of first stage to match demo behavior
-            // where user must select a stage to view checkpoints.
         } catch (error) {
             console.error('Error loading checklist:', error);
         } finally {
@@ -57,14 +51,14 @@ export default function ChecklistDetail() {
 
     useEffect(() => {
         loadData();
-    }, [id]);
+    }, [checklistId]);
 
     const handleReorderStages = async (newStages: ChecklistStage[]) => {
         const stageIds = newStages.map(s => s.id);
         setStages(newStages);
         setSaving(true);
         try {
-            await fetch(`/api/checklists/${id}`, {
+            await fetch(`/api/checklists/${checklistId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reorder_stages: stageIds }),
@@ -84,7 +78,7 @@ export default function ChecklistDetail() {
         setCheckpoints(newCheckpoints);
         setSaving(true);
         try {
-            await fetch(`/api/checklists/${id}`, {
+            await fetch(`/api/checklists/${checklistId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reorder_checkpoints: reorderData }),
@@ -151,17 +145,8 @@ export default function ChecklistDetail() {
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
-                    <button className="flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                        <Upload size={16} /> Import
-                    </button>
-                    <button className="flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                        <Download size={16} /> Export
-                    </button>
-                    <button
-                        onClick={() => setIsEditModalOpen(true)}
-                        className="flex items-center gap-1.5 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-sm font-medium transition-colors"
-                    >
-                        <Edit3 size={16} /> Edit
+                    <button className="flex items-center gap-1.5 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-sm font-medium transition-colors">
+                        <Rocket size={16} /> Go Live
                     </button>
                 </div>
             </div>
@@ -318,26 +303,18 @@ export default function ChecklistDetail() {
                 </div>
             )}
 
-            <EditChecklistModal
-                isOpen={isEditModalOpen}
-                onClose={() => setIsEditModalOpen(false)}
-                onSaved={loadData}
-                checklistId={id}
-                checklist={checklist}
-            />
-
             <StageFormModal
                 isOpen={isStageModalOpen}
                 onClose={() => setIsStageModalOpen(false)}
                 onSaved={loadData}
-                checklistId={id}
+                checklistId={checklistId}
             />
 
             <CheckpointFormModal
                 isOpen={isCheckpointModalOpen}
                 onClose={() => setIsCheckpointModalOpen(false)}
                 onSaved={loadData}
-                checklistId={id}
+                checklistId={checklistId}
                 stageId={activeStageId || ''}
             />
         </div>

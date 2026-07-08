@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
-import { listLibraryChecklists } from '@/lib/checklistLibrary';
+import { listLibraryChecklists, getLibraryChecklistDetail } from '@/lib/checklistLibrary';
 import { ensureChecklistSchema } from '@/lib/checklistSchema';
 import fs from 'fs';
 import path from 'path';
@@ -50,6 +50,33 @@ export async function POST(request: NextRequest) {
         [row.project_id, row.name, row.reference_number || null, row.uom || null, row.status || 'active']
       );
       const checklistId = clRows[0].id;
+
+      // If cloning from the shared library, copy over its stages/checkpoints since
+      // they live in separate library_stages/library_checkpoints tables.
+      if (row.library_checklist_id) {
+        const detail = await getLibraryChecklistDetail(row.library_checklist_id);
+        if (detail) {
+          for (const stage of detail.stages) {
+            const { rows: stageRows } = await orgQuery(payload.orgId!,
+              `INSERT INTO checklist_stages (checklist_id, sr_no, name, witness_required, drawing_required)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (checklist_id, name) DO UPDATE SET name = EXCLUDED.name
+               RETURNING id`,
+              [checklistId, stage.sr_no, stage.name, stage.witness_required || false, stage.drawing_required || false]
+            );
+            const stageId = stageRows[0].id;
+
+            const stageCheckpoints = detail.checkpoints.filter(cp => cp.stage_id === stage.id);
+            for (const cp of stageCheckpoints) {
+              await orgQuery(payload.orgId!,
+                `INSERT INTO checkpoints (stage_id, sr_no, question, input_type, drawing_required, witness_required)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [stageId, cp.sr_no, cp.question, cp.input_type, cp.drawing_required || false, cp.witness_required || false]
+              );
+            }
+          }
+        }
+      }
 
       // 2. Handle Stage
       if (row.stage_name) {

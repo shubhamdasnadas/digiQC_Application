@@ -1,28 +1,34 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { Plus, X, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Plus, X, Loader2, Search, Pencil, Trash2 } from 'lucide-react';
 import TabsPageShell from '@/components/TabsPageShell';
 import DataTable, { type Column } from '@/components/DataTable';
 import type { Checklist } from '@/lib/types';
 
 export default function ChecklistsTab() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [libraryChecklists, setLibraryChecklists] = useState<Checklist[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<Checklist | null>(null);
+  const [deleting, setDeleting] = useState<Checklist | null>(null);
 
   const load = async () => {
     setLoading(true);
-    // The global /api/checklists endpoint returns checklists joined to their project.
-    // Filter to just this project's checklists client-side.
+    // The global /api/checklists endpoint returns this org's checklists (across all
+    // projects) plus the shared checklist library, all in one list.
     const res = await fetch('/api/checklists');
     const data = await res.json();
     if (Array.isArray(data)) {
       setChecklists(data.filter((c: any) => c.project_id === id));
+      setLibraryChecklists(data.filter((c: any) => c.source === 'library'));
     } else {
       setChecklists([]);
+      setLibraryChecklists([]);
     }
     setLoading(false);
   };
@@ -31,8 +37,42 @@ export default function ChecklistsTab() {
 
   const columns: Column<Checklist>[] = [
     { key: 'idx', header: '#', width: '50px', render: (_r, i) => <span className="text-gray-500 text-xs">{i + 1}</span> },
-    { key: 'name', header: 'Checklist Name', render: (c) => <span className="text-sm font-medium text-gray-900 dark:text-white">{c.name}</span> },
+    {
+      key: 'name',
+      header: 'Checklist Name',
+      render: (c) => (
+        <button
+          onClick={() => router.push(`/projects/${id}/checklists/${c.id}?name=${encodeURIComponent(c.name)}`)}
+          className="text-sm font-medium text-gray-900 dark:text-white hover:text-teal-600 dark:hover:text-teal-400 hover:underline transition-colors"
+        >
+          {c.name}
+        </button>
+      ),
+    },
     { key: 'created', header: 'Created', render: (c) => <span className="text-xs text-gray-500">{new Date(c.created_at).toLocaleDateString('en-IN')}</span> },
+    {
+      key: 'actions',
+      header: '',
+      width: '80px',
+      render: (c) => (
+        <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={() => setEditing(c)}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-teal-50 hover:text-teal-600 dark:hover:bg-teal-500/10"
+            title="Edit"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={() => setDeleting(c)}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10"
+            title="Delete"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -48,27 +88,222 @@ export default function ChecklistsTab() {
         <DataTable columns={columns} rows={checklists} rowKey={(c) => c.id} emptyMessage="No checklists yet" />
       )}
 
-      {showAdd && <AddChecklistModal projectId={id} onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} />}
+      {showAdd && (
+        <AddChecklistModal
+          projectId={id}
+          libraryChecklists={libraryChecklists}
+          onClose={() => setShowAdd(false)}
+          onSaved={() => { setShowAdd(false); load(); }}
+        />
+      )}
+
+      {editing && (
+        <EditChecklistModal
+          checklist={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
+
+      {deleting && (
+        <DeleteChecklistModal
+          checklist={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => { setDeleting(null); load(); }}
+        />
+      )}
     </TabsPageShell>
   );
 }
 
-function AddChecklistModal({ projectId, onClose, onSaved }: { projectId: string; onClose: () => void; onSaved: () => void; }) {
-  const [name, setName] = useState('');
+function EditChecklistModal({
+  checklist,
+  onClose,
+  onSaved,
+}: {
+  checklist: Checklist;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(checklist.name);
+  const [referenceNumber, setReferenceNumber] = useState(checklist.reference_number || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) { setError('Name is required.'); return; }
+    if (!referenceNumber.trim()) { setError('Reference number is required.'); return; }
     setSaving(true);
+    setError('');
     try {
-      const res = await fetch('/api/checklists', {
-        method: 'POST',
+      const res = await fetch(`/api/checklists/${checklist.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, name }),
+        body: JSON.stringify({ name, reference_number: referenceNumber }),
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to save'); }
+      onSaved();
+    } catch (e) { setError((e as Error).message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 glass" onClick={onClose} />
+      <div className="relative card w-full max-w-md p-6 animate-scale-in">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold">Edit Checklist</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"><X size={16} /></button>
+        </div>
+        <form onSubmit={submit} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Checklist Name *</label>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Reference Number *</label>
+            <input className="input" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
+          </div>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
+            <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
+              {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function DeleteChecklistModal({
+  checklist,
+  onClose,
+  onDeleted,
+}: {
+  checklist: Checklist;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/checklists/${checklist.id}`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to delete'); }
+      onDeleted();
+    } catch (e) { setError((e as Error).message); }
+    finally { setDeleting(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 glass" onClick={onClose} />
+      <div className="relative card w-full max-w-sm p-6 animate-scale-in">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Delete Checklist</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"><X size={16} /></button>
+        </div>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Are you sure you want to delete <span className="font-medium text-gray-900 dark:text-white">{checklist.name}</span>? This will remove all of its stages and checkpoints from this project. This cannot be undone.
+        </p>
+        {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
+        <div className="flex gap-3">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
+          <button type="button" onClick={confirmDelete} className="btn-primary !bg-rose-600 hover:!bg-rose-700 flex-1 justify-center" disabled={deleting}>
+            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddChecklistModal({
+  projectId,
+  libraryChecklists,
+  onClose,
+  onSaved,
+}: {
+  projectId: string;
+  libraryChecklists: Checklist[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [mode, setMode] = useState<'existing' | 'new'>(libraryChecklists.length > 0 ? 'existing' : 'new');
+  const [selectedId, setSelectedId] = useState('');
+  const [search, setSearch] = useState('');
+  const [showResults, setShowResults] = useState(false);
+  const [name, setName] = useState('');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const searchBoxRef = useRef<HTMLDivElement>(null);
+
+  const matches = libraryChecklists.filter(c => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return c.name.toLowerCase().includes(q);
+  });
+
+  useEffect(() => {
+    const onClickOutside = (e: MouseEvent) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) setShowResults(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  const addProjectChecklist = async (checklistName: string, referenceNo: string, libraryChecklistId?: string) => {
+    const res = await fetch('/api/checklists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_id: projectId,
+        name: checklistName,
+        reference_number: referenceNo,
+        library_checklist_id: libraryChecklistId,
+      }),
+    });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to save'); }
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (mode === 'existing') {
+      const picked = libraryChecklists.find(c => c.id === selectedId);
+      if (!picked) { setError('Select a checklist from the library.'); return; }
+      setSaving(true);
+      try {
+        await addProjectChecklist(picked.name, picked.reference_number || '', picked.id);
+        onSaved();
+      } catch (e) { setError((e as Error).message); }
+      finally { setSaving(false); }
+      return;
+    }
+
+    if (!name.trim()) { setError('Name is required.'); return; }
+    if (!referenceNumber.trim()) { setError('Reference number is required.'); return; }
+    setSaving(true);
+    try {
+      // Add the new checklist to the shared library first so it's reusable by other
+      // projects, then link it into this project's checklist list.
+      const libRes = await fetch('/api/checklists/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, reference_number: referenceNumber }),
+      });
+      if (!libRes.ok) { const d = await libRes.json().catch(() => ({})); throw new Error(d.error || 'Failed to save to library'); }
+      await addProjectChecklist(name, referenceNumber);
       onSaved();
     } catch (e) { setError((e as Error).message); }
     finally { setSaving(false); }
@@ -82,15 +317,80 @@ function AddChecklistModal({ projectId, onClose, onSaved }: { projectId: string;
           <h2 className="text-lg font-semibold">Add Checklist</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"><X size={16} /></button>
         </div>
+
+        <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-xl bg-gray-100 dark:bg-gray-800">
+          <button
+            type="button"
+            onClick={() => setMode('existing')}
+            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'existing' ? 'bg-white dark:bg-gray-950 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+          >
+            Existing Checklist
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('new')}
+            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'new' ? 'bg-white dark:bg-gray-950 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+          >
+            New Checklist
+          </button>
+        </div>
+
         <form onSubmit={submit} className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Checklist Name *</label>
-            <input className="input" placeholder="Pre-pour Concrete Check" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
+          {mode === 'existing' ? (
+            libraryChecklists.length > 0 ? (
+              <div ref={searchBoxRef} className="relative">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Checklist *</label>
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    className="input pl-9"
+                    placeholder="Search checklists…"
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setSelectedId(''); setShowResults(true); }}
+                    onFocus={() => setShowResults(true)}
+                  />
+                </div>
+                {showResults && (
+                  <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg">
+                    {matches.length > 0 ? matches.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(c.id);
+                          setSearch(c.name);
+                          setShowResults(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${selectedId === c.id ? 'bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400' : 'text-gray-700 dark:text-gray-300'}`}
+                      >
+                        <span className="font-medium">{c.name}</span>
+                      </button>
+                    )) : (
+                      <p className="px-3 py-2 text-sm text-gray-400">No matches</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500 dark:text-gray-400">No checklists in the library yet. Switch to &quot;New Checklist&quot; to create one.</p>
+            )
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Checklist Name *</label>
+                <input className="input" placeholder="Pre-pour Concrete Check" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Reference Number *</label>
+                <input className="input" placeholder="PCPL/EXEC/BEAM-SLB/2026/0001" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
+              </div>
+            </>
+          )}
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-            <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
+            <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving || (mode === 'existing' && libraryChecklists.length === 0)}>
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
               {saving ? 'Saving…' : 'Add'}
             </button>

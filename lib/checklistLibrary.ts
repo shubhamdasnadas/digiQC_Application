@@ -23,6 +23,25 @@ export async function listLibraryChecklists(): Promise<(Checklist & { source: 'l
   }));
 }
 
+export async function createLibraryChecklist(name: string, referenceNumber: string): Promise<Checklist & { source: 'library' }> {
+  const { rows } = await query(
+    `INSERT INTO public.library_checklists (name, reference_number)
+     VALUES ($1, $2)
+     RETURNING id, name, reference_number, created_at`,
+    [name, referenceNumber]
+  );
+  const row = rows[0];
+  return {
+    id: row.id,
+    project_id: null,
+    name: row.name,
+    reference_number: row.reference_number,
+    status: 'active',
+    created_at: row.created_at,
+    source: 'library',
+  };
+}
+
 export async function getLibraryChecklistDetail(id: string): Promise<{
   checklist: Checklist & { source: 'library' };
   stages: ChecklistStage[];
