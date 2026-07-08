@@ -107,7 +107,7 @@ export default function Members() {
         <div className="flex items-center gap-2">
           <button 
             onClick={() => setShowAdd(true)} 
-            className="btn-primary flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-full hover:bg-orange-600 transition-all shadow-lg shadow-orange-200"
+            className="btn-primary flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-full hover:bg-teal-600 transition-all shadow-lg shadow-teal-200"
           >
             <Plus size={15} /> Add Member
           </button>
