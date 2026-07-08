@@ -57,6 +57,15 @@ export default function Teams() {
   const [saving, setSaving] = useState(false);
   const [teamsPage, setTeamsPage] = useState(1);
   const [membersPage, setMembersPage] = useState(1);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [savingMember, setSavingMember] = useState(false);
+  const [memberForm, setMemberForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    access_type: 'Paid',
+    active: true,
+  });
 
   const load = async () => {
     try {
@@ -115,6 +124,27 @@ export default function Teams() {
     load();
   };
 
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeam) return;
+    setSavingMember(true);
+    await fetch('/api/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...memberForm, teams: selectedTeam.name }),
+    });
+    setSavingMember(false);
+    setShowAddMember(false);
+    setMemberForm({
+      name: '',
+      email: '',
+      phone: '',
+      access_type: 'Paid',
+      active: true,
+    });
+    load();
+  };
+
   const typeColors: Record<string, string> = { inspection: 'badge-active', audit: 'badge-completed', compliance: 'badge-on_hold' };
 
   const formatProjectList = (value: string | null | undefined, visible: number = 3) => {
@@ -154,7 +184,7 @@ export default function Teams() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
-            <p className="text-sm text-gray-500 dark:text-gray-400">{teams.length} teams configured</p>
+            {/* <p className="text-sm text-gray-500 dark:text-gray-400">{teams.length} teams configured</p> */}
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={() => downloadSampleExcel('teams')} className="btn-secondary"><FileDown size={15} /> Template</button>
               <button onClick={() => setShowImport(true)} className="btn-secondary"><Upload size={15} /> Import</button>
@@ -222,13 +252,18 @@ export default function Teams() {
           )}
         </div>
         <div>
-          <div className="invisible flex items-center justify-between flex-wrap gap-3 mb-6" aria-hidden="true">
-            <p className="text-sm">{teams.length} teams configured</p>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+            {/* <p className="text-sm text-gray-500 dark:text-gray-400">{members.length} members configured</p> */}
+            <div />
             <div className="flex items-center gap-2 flex-wrap">
-              <button className="btn-secondary"><FileDown size={15} /> Template</button>
-              <button className="btn-secondary"><Upload size={15} /> Import</button>
-              <button className="btn-secondary"><Download size={15} /> Export XLSX</button>
-              <button className="btn-primary"><Plus size={15} /> Add Team</button>
+              <button
+                onClick={() => setShowAddMember(true)}
+                disabled={!selectedTeam}
+                title={selectedTeam ? undefined : 'Select a team first'}
+                className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Plus size={15} /> Add Member
+              </button>
             </div>
           </div>
           {selectedTeam ? (
@@ -317,6 +352,56 @@ export default function Teams() {
                 <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                   {saving ? 'Saving...' : 'Add Team'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddMember && selectedTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 glass" onClick={() => setShowAddMember(false)} />
+          <div className="relative card w-full max-w-md p-6 animate-scale-in max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Member</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">to {selectedTeam.name}</p>
+              </div>
+              <button onClick={() => setShowAddMember(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleAddMember} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Name *</label>
+                <input required className="input" placeholder="Full name" value={memberForm.name} onChange={e => setMemberForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Email</label>
+                <input type="email" className="input" placeholder="name@company.com" value={memberForm.email} onChange={e => setMemberForm(f => ({ ...f, email: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Phone No</label>
+                <input type="tel" className="input" placeholder="919876543210" value={memberForm.phone} onChange={e => setMemberForm(f => ({ ...f, phone: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Access Type</label>
+                <select className="input" value={memberForm.access_type} onChange={e => setMemberForm(f => ({ ...f, access_type: e.target.value }))}>
+                  <option value="Paid">Paid</option>
+                  <option value="Complimentary">Complimentary</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Active</label>
+                <select className="input" value={memberForm.active ? 'yes' : 'no'} onChange={e => setMemberForm(f => ({ ...f, active: e.target.value === 'yes' }))}>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setShowAddMember(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
+                <button type="submit" className="btn-primary flex-1 justify-center" disabled={savingMember}>
+                  {savingMember ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  {savingMember ? 'Saving...' : 'Add Member'}
                 </button>
               </div>
             </form>

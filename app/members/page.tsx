@@ -114,9 +114,8 @@ export default function Members() {
               onChange={e => setFilterAccessType(e.target.value)}
             >
               <option value="All">Access Type</option>
-              <option value="Admin">Admin</option>
-              <option value="User">User</option>
-              <option value="Viewer">Viewer</option>
+              <option value="Paid">Paid</option>
+              <option value="Complimentary">Complimentary</option>
             </select>
             <ChevronDown size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
@@ -169,7 +168,7 @@ export default function Members() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900 dark:text-white">{m.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">Paid</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.access_type === 'Paid' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>{m.access_type || '—'}</span>
                       </div>
                     </td>
                     <td className="px-5 py-3">
@@ -235,9 +234,8 @@ export default function Members() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Access Type</label>
                   <select className="input text-xs">
-                    <option value="User">User</option>
-                    <option value="Admin">Admin</option>
-                    <option value="Viewer">Viewer</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Complimentary">Complimentary</option>
                   </select>
                 </div>
                 <div>
