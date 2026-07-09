@@ -14,7 +14,7 @@ export async function listLibraryChecklists(): Promise<(Checklist & { source: 'l
     name: row.name,
     reference_number: row.reference_number,
     uom: undefined,
-    status: 'active' as const,
+    status: 'draft' as const,
     updated_by: undefined,
     updated_at: undefined,
     created_at: row.created_at,
@@ -36,7 +36,7 @@ export async function createLibraryChecklist(name: string, referenceNumber: stri
     project_id: null,
     name: row.name,
     reference_number: row.reference_number,
-    status: 'active',
+    status: 'draft',
     created_at: row.created_at,
     source: 'library',
   };

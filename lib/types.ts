@@ -108,6 +108,7 @@ export interface ProjectMember {
   user_name?: string;
   user_email?: string;
   user_avatar?: string;
+  user_teams?: string;
 }
 
 export interface ProjectTeam {
@@ -124,7 +125,7 @@ export interface Checklist {
   name: string;
   reference_number?: string;
   uom?: string;
-  status?: 'active' | 'inactive';
+  status?: 'draft' | 'live';
   updated_by?: string;
   updated_at?: string;
   created_at: string;
@@ -170,6 +171,8 @@ export interface EQC {
   inspected_at: string | null;
   rfi_id: string | null;
   notes: string;
+  assigned_user_ids: string[];
+  assigned_team_ids: string[];
   created_at: string;
   // joined
   checklist_name?: string;

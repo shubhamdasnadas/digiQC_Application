@@ -49,6 +49,15 @@ export default function ChecklistsTab() {
         </button>
       ),
     },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (c) => (
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${c.status === 'live' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
+          {c.status === 'live' ? 'Live' : 'Draft'}
+        </span>
+      ),
+    },
     { key: 'created', header: 'Created', render: (c) => <span className="text-xs text-gray-500">{new Date(c.created_at).toLocaleDateString('en-IN')}</span> },
     {
       key: 'actions',

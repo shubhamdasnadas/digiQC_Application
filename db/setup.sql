@@ -201,7 +201,7 @@ BEGIN
       name text NOT NULL,
       reference_number text,
       uom text,
-      status text DEFAULT ''active'',
+      status text DEFAULT ''draft'',
       created_at timestamptz DEFAULT now(),
       UNIQUE (project_id, reference_number)
     )', schema_name);
@@ -266,6 +266,8 @@ BEGIN
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       project_id uuid NOT NULL REFERENCES %I.projects(id) ON DELETE CASCADE,
       team_id uuid NOT NULL REFERENCES %I.teams(id) ON DELETE CASCADE,
+      assigned_checklist text DEFAULT '''',
+      assigned_user text DEFAULT '''',
       added_at timestamptz DEFAULT now(),
       UNIQUE(project_id, team_id)
     )', schema_name, schema_name, schema_name);
@@ -288,6 +290,8 @@ BEGIN
       inspected_at timestamptz,
       rfi_id uuid,
       notes text DEFAULT '''',
+      assigned_user_ids uuid[] NOT NULL DEFAULT ''{}'',
+      assigned_team_ids uuid[] NOT NULL DEFAULT ''{}'',
       created_at timestamptz DEFAULT now()
     )', schema_name, schema_name);
 

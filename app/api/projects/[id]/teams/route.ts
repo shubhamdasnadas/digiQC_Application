@@ -16,6 +16,7 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
     const { rows } = await orgQuery(
       payload.orgId!,
       `SELECT pt.id, pt.project_id, pt.team_id, pt.added_at,
+              pt.assigned_checklist, pt.assigned_user,
               t.name AS team_name, t.type AS team_type,
               t.team_lead_name, t.spoc_name
        FROM project_teams pt

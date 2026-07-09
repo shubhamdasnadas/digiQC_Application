@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
          VALUES ($1, $2, $3, $4, $5) 
          ON CONFLICT (project_id, reference_number) DO UPDATE SET name = EXCLUDED.name, uom = EXCLUDED.uom
          RETURNING id`,
-        [row.project_id, row.name, row.reference_number || null, row.uom || null, row.status || 'active']
+        [row.project_id, row.name, row.reference_number || null, row.uom || null, row.status || 'draft']
       );
       const checklistId = clRows[0].id;
 

@@ -124,8 +124,8 @@ export default function Checklists() {
                       <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.uom ?? '—'}</td>
                       <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.reference_number ?? '—'}</td>
                       <td className="px-5 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${c.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
-                          {c.status === 'active' ? 'Active' : 'Inactive'}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${c.status === 'live' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
+                          {c.status === 'live' ? 'Live' : 'Draft'}
                         </span>
                       </td>
                       <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.updated_by ?? '—'}</td>

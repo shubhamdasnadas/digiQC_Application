@@ -80,8 +80,8 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
         `INSERT INTO eqcs
            (project_id, location, checklist_id, stage_index, total_stages,
             stage_result, approver_id, approver_log, status, inspected_by,
-            inspected_at, rfi_id, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            inspected_at, rfi_id, notes, assigned_user_ids, assigned_team_ids)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [
           id,
           r.location ?? '',
@@ -96,8 +96,50 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
           r.inspected_at ?? new Date().toISOString(),
           r.rfi_id ?? null,
           r.notes ?? '',
+          r.assigned_user_ids ?? [],
+          r.assigned_team_ids ?? [],
         ]
       );
+
+      // Reflect the assignment on the linked teams so the project's Teams tab
+      // can show which checklist/user each team was just assigned.
+      const teamIds: string[] = r.assigned_team_ids ?? [];
+      if (teamIds.length > 0 && r.checklist_id) {
+        const { rows: clRows } = await orgQuery(
+          payload.orgId!,
+          `SELECT name FROM checklists WHERE id = $1`,
+          [r.checklist_id]
+        );
+        const checklistName = clRows[0]?.name ?? '';
+
+        const userIds: string[] = r.assigned_user_ids ?? [];
+        let userNames = '';
+        if (userIds.length > 0) {
+          const { rows: userRows } = await orgQuery(
+            payload.orgId!,
+            `SELECT name FROM members WHERE id = ANY($1::uuid[])`,
+            [userIds]
+          );
+          userNames = userRows.map((u: { name: string }) => u.name).join(', ');
+        }
+
+        await orgQuery(
+          payload.orgId!,
+          `UPDATE project_teams
+           SET assigned_checklist = $1, assigned_user = $2
+           WHERE project_id = $3 AND team_id = ANY($4::uuid[])`,
+          [checklistName, userNames, id, teamIds]
+        );
+
+        // A checklist only goes live once it has both a team and a user assigned.
+        if (userIds.length > 0) {
+          await orgQuery(
+            payload.orgId!,
+            `UPDATE checklists SET status = 'live' WHERE id = $1`,
+            [r.checklist_id]
+          );
+        }
+      }
     }
     return NextResponse.json({ success: true });
   } catch (error) {

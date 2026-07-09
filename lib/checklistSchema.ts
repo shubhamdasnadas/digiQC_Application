@@ -13,7 +13,7 @@ export async function ensureChecklistSchema(orgId: string) {
       console.log('Applying missing checklist columns...');
       await orgQuery(orgId, `ALTER TABLE checklists ADD COLUMN IF NOT EXISTS reference_number TEXT`);
       await orgQuery(orgId, `ALTER TABLE checklists ADD COLUMN IF NOT EXISTS uom TEXT`);
-      await orgQuery(orgId, `ALTER TABLE checklists ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'`);
+      await orgQuery(orgId, `ALTER TABLE checklists ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft'`);
       await orgQuery(orgId, `ALTER TABLE checklist_stages ADD COLUMN IF NOT EXISTS sr_no INTEGER DEFAULT 0`);
       await orgQuery(orgId, `ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS sr_no INTEGER DEFAULT 0`);
     }

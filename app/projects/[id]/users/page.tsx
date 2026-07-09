@@ -2,12 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, X, Loader2, Trash2 } from 'lucide-react';
+import { Plus, X, Loader2, Trash2, ChevronDown } from 'lucide-react';
 import TabsPageShell from '@/components/TabsPageShell';
 import DataTable, { type Column } from '@/components/DataTable';
-import type { ProjectMember } from '@/lib/types';
+import type { ProjectMember, Member, Team, EQC } from '@/lib/types';
 
 const ROLES = ['Project Admin', 'Inspector', 'Auditor', 'Associate'] as const;
+
+// project_members.role is constrained to admin/member/inspector/approver/viewer at the DB level
+const ROLE_TO_DB_ROLE: Record<typeof ROLES[number], string> = {
+  'Project Admin': 'admin',
+  'Inspector': 'inspector',
+  'Auditor': 'approver',
+  'Associate': 'member',
+};
 
 const ROLE_DEFAULTS = {
   'Project Admin': { location: true, authentication: true, webAccess: 'Project', raiseInstruction: true },
@@ -19,21 +27,34 @@ const ROLE_DEFAULTS = {
 export default function UsersTab() {
   const { id } = useParams<{ id: string }>();
   const [members, setMembers] = useState<ProjectMember[]>([]);
-  const [allUsers, setAllUsers] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [eqcs, setEqcs] = useState<EQC[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [mRes, uRes] = await Promise.all([
+    const [mRes, uRes, eRes] = await Promise.all([
       fetch(`/api/projects/${id}/members`),
-      fetch('/api/users'),
+      fetch('/api/members'),
+      fetch(`/api/projects/${id}/eqcs`),
     ]);
     const m = await mRes.json();
     const u = await uRes.json();
+    const e = await eRes.json();
     setMembers(Array.isArray(m) ? m : []);
-    setAllUsers(Array.isArray(u) ? u : []);
+    setAllMembers(Array.isArray(u) ? u : []);
+    setEqcs(Array.isArray(e) ? e : []);
     setLoading(false);
+  };
+
+  const assignedChecklistNames = (userId: string) => {
+    const names = new Set(
+      eqcs
+        .filter((e) => e.assigned_user_ids?.includes(userId) && e.checklist_name)
+        .map((e) => e.checklist_name as string)
+    );
+    return Array.from(names);
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id]);
@@ -68,6 +89,21 @@ export default function UsersTab() {
       render: (m) => <span className="text-xs text-gray-500">{new Date(m.added_at).toLocaleDateString('en-IN')}</span>,
     },
     {
+      key: 'assigned_teams', header: 'Assigned Teams',
+      render: (m) => <span className="text-xs text-gray-500">{m.user_teams || '—'}</span>,
+    },
+    {
+      key: 'assigned_checklist', header: 'Assigned Checklist',
+      render: (m) => {
+        const names = assignedChecklistNames(m.user_id);
+        return <span className="text-xs text-gray-500">{names.length > 0 ? names.join(', ') : '—'}</span>;
+      },
+    },
+    {
+      key: 'assigned_rfi', header: 'Assigned RFI',
+      render: () => <span className="text-xs text-gray-500">—</span>,
+    },
+    {
       key: 'actions', header: '',
       render: (m) => (
         <button onClick={() => removeMember(m.user_id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10">
@@ -77,8 +113,8 @@ export default function UsersTab() {
     },
   ];
 
-  // Filter out users already on the project from the "Add" picker
-  const available = allUsers.filter((u) => !members.some((m) => m.user_id === u.id));
+  // Filter out members already on the project from the "Add" picker
+  const available = allMembers.filter((u) => !members.some((m) => m.user_id === u.id));
 
   return (
     <TabsPageShell
@@ -107,7 +143,7 @@ export default function UsersTab() {
 
 function AddMemberModal({
   projectId, available, onClose, onSaved,
-}: { projectId: string; available: { id: string; name: string; email: string; company?: string }[]; onClose: () => void; onSaved: () => void; }) {
+}: { projectId: string; available: Member[]; onClose: () => void; onSaved: () => void; }) {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [role, setRole] = useState<typeof ROLES[number]>('Project Admin');
   const [permissions, setPermissions] = useState(ROLE_DEFAULTS['Project Admin']);
@@ -116,9 +152,11 @@ function AddMemberModal({
   const [selectedChecklists, setSelectedChecklists] = useState<string[]>([]);
   const [rfis, setRfis] = useState<{ id: string; name: string }[]>([]);
   const [selectedRfi, setSelectedRfi] = useState('');
+  const [teams, setTeams] = useState<Team[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
   const [roleSearch, setRoleSearch] = useState('');
   const [checklistSearch, setChecklistSearch] = useState('');
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -142,6 +180,14 @@ function AddMemberModal({
           setRfis(Array.isArray(r) ? r : []);
         }
       } catch (e) { console.error('Failed to fetch RFIs', e); }
+
+      try {
+        const tRes = await fetch('/api/teams');
+        if (tRes.ok) {
+          const t = await tRes.json();
+          setTeams(Array.isArray(t) ? t : []);
+        }
+      } catch (e) { console.error('Failed to fetch teams', e); }
     };
     fetchData();
   }, []);
@@ -163,16 +209,31 @@ function AddMemberModal({
       const res = await fetch(`/api/projects/${projectId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          user_ids: selectedUsers, 
-          role, 
-          permissions, 
-          access, 
-          checklists: selectedChecklists, 
-          rfi: selectedRfi 
+        body: JSON.stringify({
+          rows: selectedUsers.map((user_id) => ({ user_id, role: ROLE_TO_DB_ROLE[role] })),
+          permissions,
+          access,
+          checklists: selectedChecklists,
+          rfi: selectedRfi,
         }),
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to assign'); }
+
+      // Any team a newly-assigned user belongs to (whether just one member or the
+      // whole team was picked) should show up on the project's Teams tab.
+      const selectedMembers = available.filter(u => selectedUsers.includes(u.id));
+      const teamNames = new Set(
+        selectedMembers.flatMap(m => (m.teams || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean))
+      );
+      const teamIds = teams.filter(t => teamNames.has(t.name.trim().toLowerCase())).map(t => t.id);
+      if (teamIds.length > 0) {
+        await fetch(`/api/projects/${projectId}/teams`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: teamIds.map(team_id => ({ team_id })) }),
+        });
+      }
+
       onSaved();
     } catch (e) { setError((e as Error).message); }
     finally { setSaving(false); }
@@ -182,6 +243,23 @@ function AddMemberModal({
     setSelectedUsers(prev => prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]);
   };
 
+  const toggleTeamCollapsed = (team: string) => {
+    setCollapsedTeams(prev => {
+      const next = new Set(prev);
+      if (next.has(team)) next.delete(team); else next.add(team);
+      return next;
+    });
+  };
+
+  const toggleTeam = (teamMemberIds: string[]) => {
+    setSelectedUsers(prev => {
+      const allSelected = teamMemberIds.every(id => prev.includes(id));
+      return allSelected
+        ? prev.filter(id => !teamMemberIds.includes(id))
+        : Array.from(new Set([...prev, ...teamMemberIds]));
+    });
+  };
+
   const toggleChecklist = (id: string) => {
     setSelectedChecklists(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
   };
@@ -189,11 +267,15 @@ function AddMemberModal({
   const selectAllChecklists = () => setSelectedChecklists(checklists.map(c => c.id));
   const deselectAllChecklists = () => setSelectedChecklists([]);
 
-  // Group users by company for hierarchical view
-  const groupedUsers = available.reduce((acc, user) => {
-    const company = user.company || 'Other';
-    if (!acc[company]) acc[company] = [];
-    acc[company].push(user);
+  // Group members by team for hierarchical view (a member with multiple comma-separated
+  // teams appears under each of them)
+  const groupedUsers = available.reduce((acc, member) => {
+    const teamNames = (member.teams || '').split(',').map(t => t.trim()).filter(Boolean);
+    const groups = teamNames.length > 0 ? teamNames : ['Unassigned'];
+    for (const team of groups) {
+      if (!acc[team]) acc[team] = [];
+      acc[team].push(member);
+    }
     return acc;
   }, {} as Record<string, typeof available>);
 
@@ -221,31 +303,48 @@ function AddMemberModal({
             </div>
             {isUserDropdownOpen && (
               <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
-                <div className="sticky top-0 bg-white dark:bg-gray-900 pb-2">
-                  <input 
-                    className="input w-full" 
-                    placeholder="Search users..." 
-                    value={userSearch} 
+                <div className="sticky -top-2 z-20 -mx-2 -mt-2 mb-2 px-2 pt-2 pb-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
+                  <input
+                    className="input w-full"
+                    placeholder="Search users..."
+                    value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
                   />
                 </div>
-                {Object.entries(groupedUsers).map(([company, users]) => {
+                {Object.entries(groupedUsers).map(([team, users]) => {
                   const filteredUsers = users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase()));
                   if (filteredUsers.length === 0) return null;
+                  const teamMemberIds = filteredUsers.map(u => u.id);
+                  const allSelected = teamMemberIds.every(mid => selectedUsers.includes(mid));
+                  const someSelected = !allSelected && teamMemberIds.some(mid => selectedUsers.includes(mid));
+                  const isCollapsed = collapsedTeams.has(team);
                   return (
-                    <div key={company} className="mb-2">
-                      <div className="flex items-center gap-2 p-1 text-sm font-medium text-gray-700 dark:text-gray-300">
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-                        {company} - {filteredUsers.length}
+                    <div key={team} className="mb-2">
+                      <div
+                        className="flex items-center gap-2 p-1 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
+                        onClick={() => toggleTeamCollapsed(team)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                          readOnly
+                          className="rounded text-teal-600"
+                          onClick={(e) => { e.stopPropagation(); toggleTeam(teamMemberIds); }}
+                        />
+                        <span className="flex-1">{team} - {filteredUsers.length}</span>
+                        <ChevronDown size={14} className={`text-gray-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
                       </div>
-                      <div className="pl-6 space-y-1">
-                        {filteredUsers.map(u => (
-                          <div key={u.id} className="flex items-center gap-2 p-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer" onClick={() => toggleUser(u.id)}>
-                            <input type="checkbox" checked={selectedUsers.includes(u.id)} readOnly className="rounded text-teal-600" />
-                            <span className="text-xs text-gray-600 dark:text-gray-400">{u.name}</span>
-                          </div>
-                        ))}
-                      </div>
+                      {!isCollapsed && (
+                        <div className="pl-6 space-y-1">
+                          {filteredUsers.map(u => (
+                            <div key={u.id} className="flex items-center gap-2 p-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer" onClick={() => toggleUser(u.id)}>
+                              <input type="checkbox" checked={selectedUsers.includes(u.id)} readOnly className="rounded text-teal-600" />
+                              <span className="text-xs text-gray-600 dark:text-gray-400">{u.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -268,11 +367,11 @@ function AddMemberModal({
             </div>
             {isRoleDropdownOpen && (
               <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
-                <div className="sticky top-0 bg-white dark:bg-gray-900 pb-2">
-                  <input 
-                    className="input w-full" 
-                    placeholder="Search role..." 
-                    value={roleSearch} 
+                <div className="sticky -top-2 z-20 -mx-2 -mt-2 mb-2 px-2 pt-2 pb-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
+                  <input
+                    className="input w-full"
+                    placeholder="Search role..."
+                    value={roleSearch}
                     onChange={(e) => setRoleSearch(e.target.value)}
                   />
                 </div>
@@ -376,11 +475,11 @@ function AddMemberModal({
             </div>
             {isChecklistDropdownOpen && (
               <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
-                <div className="sticky top-0 bg-white dark:bg-gray-900 pb-2">
-                  <input 
-                    className="input w-full" 
-                    placeholder="Search checklist..." 
-                    value={checklistSearch} 
+                <div className="sticky -top-2 z-20 -mx-2 -mt-2 mb-2 px-2 pt-2 pb-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
+                  <input
+                    className="input w-full"
+                    placeholder="Search checklist..."
+                    value={checklistSearch}
                     onChange={(e) => setChecklistSearch(e.target.value)}
                   />
                 </div>
