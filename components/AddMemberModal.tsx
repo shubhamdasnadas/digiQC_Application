@@ -9,13 +9,16 @@ interface Team {
   type: string;
 }
 
+import type { Member } from '@/lib/types';
+
 interface AddMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  member?: Member | null;
 }
 
-export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMemberModalProps) {
+export default function AddMemberModal({ isOpen, onClose, onSuccess, member }: AddMemberModalProps) {
   const [step, setStep] = useState(1);
   const [isAddingTeam, setIsAddingTeam] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -37,8 +40,25 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
   useEffect(() => {
     if (isOpen) {
       fetchTeams();
+      if (member) {
+        setFormData({
+          name: member.name,
+          role: member.default_role || '',
+          email: member.email,
+          phone: member.phone || '',
+          teamId: member.teams || '',
+        });
+      } else {
+        setFormData({
+          name: '',
+          role: '',
+          email: '',
+          phone: '',
+          teamId: '',
+        });
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, member]);
 
   const fetchTeams = async () => {
     try {
@@ -76,18 +96,21 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
     }
   };
 
-  const handleAddMember = async () => {
+  const handleSaveMember = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/members', {
-        method: 'POST',
+      const method = member ? 'PUT' : 'POST';
+      const url = member ? `/api/members?id=${member.id}` : '/api/members';
+      
+      const res = await fetch(url, {
+        method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
           default_role: formData.role,
-          teams: formData.teamId, // In the current API, teams is a string/comma-separated
+          teams: formData.teamId,
         }),
       });
       if (res.ok) {
@@ -95,7 +118,7 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
         onClose();
       }
     } catch (error) {
-      console.error('Failed to add member:', error);
+      console.error(`Failed to ${member ? 'update' : 'add'} member:`, error);
     } finally {
       setLoading(false);
     }
@@ -118,11 +141,11 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
         <div className="px-8 pt-8 pb-6">
           <div className="flex items-center justify-between max-w-xs mx-auto">
             <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step === 1 ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                {step === 1 ? '1' : <Check size={16} />}
-              </div>
-              <span className={`text-sm font-medium ${step === 1 ? 'text-gray-900' : 'text-gray-400'}`}>Add User</span>
-            </div>
+               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step === 1 ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                 {step === 1 ? '1' : <Check size={16} />}
+               </div>
+               <span className={`text-sm font-medium ${step === 1 ? 'text-gray-900' : 'text-gray-400'}`}>{member ? 'Edit User' : 'Add User'}</span>
+             </div>
             
             <div className={`h-0.5 w-12 transition-colors ${step === 2 ? 'bg-teal-500' : 'bg-gray-200'}`} />
             
@@ -252,13 +275,13 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
                 >
                   <ChevronLeft size={16} /> Previous
                 </button>
-                <button 
-                  onClick={handleAddMember}
-                  disabled={!formData.teamId || loading}
-                  className="px-8 py-2.5 bg-teal-500 text-white rounded-full font-semibold hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-teal-200"
-                >
-                  {loading ? 'Adding...' : 'Add User'}
-                </button>
+                 <button 
+                   onClick={handleSaveMember}
+                   disabled={!formData.teamId || loading}
+                   className="px-8 py-2.5 bg-teal-500 text-white rounded-full font-semibold hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-teal-200"
+                 >
+                   {loading ? (member ? 'Updating...' : 'Adding...') : (member ? 'Update User' : 'Add User')}
+                 </button>
               </div>
             </div>
           )}

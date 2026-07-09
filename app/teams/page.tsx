@@ -319,12 +319,12 @@ export default function Teams() {
               <button onClick={() => setShowAdd(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
             </div>
             <form onSubmit={handleAdd} className="space-y-3">
-              <div>
+              {/* <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Organization</label>
                 <select className="input" value={form.organization_id} onChange={e => setForm(f => ({ ...f, organization_id: e.target.value }))}>
                   {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
-              </div>
+              </div> */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Team Name *</label>
                 <input required className="input" placeholder="QC Team Alpha" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
@@ -332,12 +332,16 @@ export default function Teams() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Type</label>
                 <select className="input" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-                  <option value="inspection">Inspection</option>
-                  <option value="audit">Audit</option>
-                  <option value="compliance">Compliance</option>
+                  <option value="">Default</option>
+                  <option value="inspection">Consultanat</option>
+                  <option value="contractor">Contractor</option>
+                  <option value="client">Client</option>
+                  <option value="developer">Developer</option>
+                  <option value="vendor">Vendor</option>
+                  <option value="others">Others</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              {/* <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Team Lead</label>
                   <input className="input" placeholder="Name" value={form.team_lead_name} onChange={e => setForm(f => ({ ...f, team_lead_name: e.target.value }))} />
@@ -346,7 +350,7 @@ export default function Teams() {
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">SPOC</label>
                   <input className="input" placeholder="Name" value={form.spoc_name} onChange={e => setForm(f => ({ ...f, spoc_name: e.target.value }))} />
                 </div>
-              </div>
+              </div> */}
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowAdd(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
                 <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
@@ -366,7 +370,7 @@ export default function Teams() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Member</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">to {selectedTeam.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{selectedTeam.name}</p>
               </div>
               <button onClick={() => setShowAddMember(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
             </div>
@@ -383,20 +387,20 @@ export default function Teams() {
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Phone No</label>
                 <input type="tel" className="input" placeholder="919876543210" value={memberForm.phone} onChange={e => setMemberForm(f => ({ ...f, phone: e.target.value }))} />
               </div>
-              <div>
+              {/* <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Access Type</label>
                 <select className="input" value={memberForm.access_type} onChange={e => setMemberForm(f => ({ ...f, access_type: e.target.value }))}>
                   <option value="Paid">Paid</option>
                   <option value="Complimentary">Complimentary</option>
                 </select>
-              </div>
-              <div>
+              </div> */}
+              {/* <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Active</label>
                 <select className="input" value={memberForm.active ? 'yes' : 'no'} onChange={e => setMemberForm(f => ({ ...f, active: e.target.value === 'yes' }))}>
                   <option value="yes">Yes</option>
                   <option value="no">No</option>
                 </select>
-              </div>
+              </div> */}
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowAddMember(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
                 <button type="submit" className="btn-primary flex-1 justify-center" disabled={savingMember}>

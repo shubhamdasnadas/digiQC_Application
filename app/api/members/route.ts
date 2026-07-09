@@ -14,6 +14,40 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function PUT(request: NextRequest) {
+  const { payload, response } = requireAuth(request);
+  if (!payload) return response;
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'Member ID is required' }, { status: 400 });
+    }
+
+    const body = await request.json();
+    
+    await orgQuery(payload.orgId!, 
+      `UPDATE members 
+       SET name = $1, email = $2, phone = $3, default_role = $4, teams = $5 
+       WHERE id = $6 AND organization_id = $7`,
+      [
+        body.name,
+        body.email ?? '',
+        body.phone ?? '',
+        body.default_role ?? '',
+        body.teams ?? '',
+        id,
+        payload.orgId
+      ]
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;

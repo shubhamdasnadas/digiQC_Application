@@ -14,6 +14,7 @@ export default function Members() {
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAccessType, setFilterAccessType] = useState('All');
@@ -106,7 +107,10 @@ export default function Members() {
         </div>
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => setShowAdd(true)} 
+            onClick={() => {
+              setEditingMember(null);
+              setShowAdd(true);
+            }} 
             className="btn-primary flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-full hover:bg-teal-600 transition-all shadow-lg shadow-teal-200"
           >
             <Plus size={15} /> Add Member
@@ -220,12 +224,20 @@ export default function Members() {
                     <td className="px-5 py-3 text-xs text-gray-500 dark:text-gray-400">
                       Inspections: 0 Instructions: 0 Approval given: 0
                     </td>
-                    <td className="px-5 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><Edit2 size={14} /></button>
-                        <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><MoreVertical size={14} /></button>
-                      </div>
-                    </td>
+                      <td className="px-5 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => {
+                              setEditingMember(m);
+                              setShowAdd(true);
+                            }}
+                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><MoreVertical size={14} /></button>
+                        </div>
+                      </td>
                   </tr>
                 ))}
                 {filteredMembers.length === 0 && (
@@ -249,11 +261,18 @@ export default function Members() {
          />
        )}
 
-       <AddMemberModal 
-         isOpen={showAdd} 
-         onClose={() => setShowAdd(false)} 
-         onSuccess={() => { load(); }} 
-       />
+        <AddMemberModal 
+          isOpen={showAdd} 
+          onClose={() => {
+            setShowAdd(false);
+            setEditingMember(null);
+          }} 
+          onSuccess={() => { 
+            load(); 
+            setEditingMember(null);
+          }} 
+          member={editingMember}
+        />
     </div>
   );
 }
