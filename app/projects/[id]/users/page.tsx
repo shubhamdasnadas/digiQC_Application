@@ -156,7 +156,7 @@ function AddMemberModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [userSearch, setUserSearch] = useState('');
-  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+  const [openTeams, setOpenTeams] = useState<Set<string>>(new Set());
   const [roleSearch, setRoleSearch] = useState('');
   const [checklistSearch, setChecklistSearch] = useState('');
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -243,21 +243,23 @@ function AddMemberModal({
     setSelectedUsers(prev => prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]);
   };
 
-  const toggleTeamCollapsed = (team: string) => {
-    setCollapsedTeams(prev => {
+  const toggleTeamOpen = (team: string) => {
+    setOpenTeams(prev => {
       const next = new Set(prev);
       if (next.has(team)) next.delete(team); else next.add(team);
       return next;
     });
   };
 
-  const toggleTeam = (teamMemberIds: string[]) => {
+  const toggleTeam = (team: string, teamMemberIds: string[]) => {
     setSelectedUsers(prev => {
       const allSelected = teamMemberIds.every(id => prev.includes(id));
       return allSelected
         ? prev.filter(id => !teamMemberIds.includes(id))
         : Array.from(new Set([...prev, ...teamMemberIds]));
     });
+    // Selecting a team should reveal its members rather than leaving the list collapsed.
+    setOpenTeams(prev => new Set(prev).add(team));
   };
 
   const toggleChecklist = (id: string) => {
@@ -317,12 +319,12 @@ function AddMemberModal({
                   const teamMemberIds = filteredUsers.map(u => u.id);
                   const allSelected = teamMemberIds.every(mid => selectedUsers.includes(mid));
                   const someSelected = !allSelected && teamMemberIds.some(mid => selectedUsers.includes(mid));
-                  const isCollapsed = collapsedTeams.has(team);
+                  const isCollapsed = !openTeams.has(team);
                   return (
                     <div key={team} className="mb-2">
                       <div
                         className="flex items-center gap-2 p-1 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
-                        onClick={() => toggleTeamCollapsed(team)}
+                        onClick={() => toggleTeamOpen(team)}
                       >
                         <input
                           type="checkbox"
@@ -330,7 +332,7 @@ function AddMemberModal({
                           ref={(el) => { if (el) el.indeterminate = someSelected; }}
                           readOnly
                           className="rounded text-teal-600"
-                          onClick={(e) => { e.stopPropagation(); toggleTeam(teamMemberIds); }}
+                          onClick={(e) => { e.stopPropagation(); toggleTeam(team, teamMemberIds); }}
                         />
                         <span className="flex-1">{team} - {filteredUsers.length}</span>
                         <ChevronDown size={14} className={`text-gray-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
