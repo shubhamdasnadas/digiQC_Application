@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Plus, X, Loader2, Upload, ChevronDown, FileDown, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Plus, X, Loader2, Upload, ChevronDown, FileDown, Download, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
@@ -53,12 +53,14 @@ export default function Teams() {
   const [showImport, setShowImport] = useState(false);
   const [showTable, setShowTable] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [form, setForm] = useState({ organization_id: '', name: '', type: 'inspection', team_lead_name: '', spoc_name: '' });
+  const [form, setForm] = useState({ organization_id: '', name: '', type: 'developer', team_lead_name: '', spoc_name: '' });
   const [saving, setSaving] = useState(false);
   const [teamsPage, setTeamsPage] = useState(1);
   const [membersPage, setMembersPage] = useState(1);
   const [showAddMember, setShowAddMember] = useState(false);
   const [savingMember, setSavingMember] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [memberForm, setMemberForm] = useState({
     name: '',
     email: '',
@@ -122,6 +124,47 @@ export default function Teams() {
     setSaving(false);
     setShowAdd(false);
     load();
+  };
+
+  const handleEdit = (team: Team) => {
+    setEditingTeam(team);
+    setForm({
+      organization_id: team.organization_id || '',
+      name: team.name || '',
+      type: team.type || 'developer',
+      team_lead_name: team.team_lead_name || '',
+      spoc_name: team.spoc_name || '',
+    });
+    setShowAdd(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTeam) return;
+    setSaving(true);
+    await fetch(`/api/teams?id=${editingTeam.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    });
+    setSaving(false);
+    setShowAdd(false);
+    setEditingTeam(null);
+    load();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this team?')) return;
+    setDeletingId(id);
+    await fetch(`/api/teams?id=${id}`, { method: 'DELETE' });
+    setDeletingId(null);
+    if (selectedTeam?.id === id) setSelectedTeam(null);
+    load();
+  };
+
+  const closeModal = () => {
+    setShowAdd(false);
+    setEditingTeam(null);
   };
 
   const handleAddMember = async (e: React.FormEvent) => {
@@ -209,7 +252,7 @@ export default function Teams() {
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                       <tr>
-                        {['Team Name', 'Type', 'Team Lead', 'SPOC', 'Active Projects', 'Inactive Projects', 'Created'].map(h => (
+                        {['Team Name', 'Type', 'Active Projects', 'Created', 'Action'].map(h => (
                           <th key={h} className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">{h}</th>
                         ))}
                       </tr>
@@ -223,10 +266,10 @@ export default function Teams() {
                         >
                           <td className="px-5 py-3 text-gray-900 dark:text-white font-medium">{t.name}</td>
                           <td className="px-5 py-3"><span className={`badge ${typeColors[t.type] ?? 'badge-active'} capitalize text-xs`}>{t.type}</span></td>
-                          <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{t.team_lead_name || '—'}</td>
-                          <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{t.spoc_name || '—'}</td>
+                          {/* <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{t.team_lead_name || '—'}</td>
+                          <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{t.spoc_name || '—'}</td> */}
                           <td className="px-5 py-3 text-xs max-w-xs">
-                            <div className="relative group inline-block max-w-full">
+                            <div className="relative group inline-block max-w-full ">
                               <span className="text-gray-600 dark:text-gray-300 truncate block underline decoration-dotted decoration-gray-400 underline-offset-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors">
                                 {formatProjectList(t.active_projects)}
                               </span>
@@ -239,8 +282,28 @@ export default function Teams() {
                               )}
                             </div>
                           </td>
-                          <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate" title={t.inactive_projects}>{formatProjectList(t.inactive_projects)}</td>
+                          {/* <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate" title={t.inactive_projects}>{formatProjectList(t.inactive_projects)}</td> */}
                           <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">{new Date(t.created_at).toLocaleDateString('en-IN')}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEdit(t); }}
+                                disabled={editingTeam !== null || deletingId === t.id || t.name?.toLowerCase() === 'main team'}
+                                title={t.name?.toLowerCase() === 'main team' ? 'Main team cannot be edited' : 'Edit team'}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-500/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }}
+                                disabled={editingTeam !== null || deletingId === t.id || t.name?.toLowerCase() === 'main team'}
+                                title={t.name?.toLowerCase() === 'main team' ? 'Main team cannot be deleted' : 'Delete team'}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                {deletingId === t.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -312,13 +375,13 @@ export default function Teams() {
 
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 glass" onClick={() => setShowAdd(false)} />
+          <div className="absolute inset-0 bg-black/60 glass" onClick={closeModal} />
           <div className="relative card w-full max-w-md p-6 animate-scale-in">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Team</h2>
-              <button onClick={() => setShowAdd(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{editingTeam ? 'Edit Team' : 'Add Team'}</h2>
+              <button onClick={closeModal} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
             </div>
-            <form onSubmit={handleAdd} className="space-y-3">
+            <form onSubmit={editingTeam ? handleUpdate : handleAdd} className="space-y-3">
               {/* <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Organization</label>
                 <select className="input" value={form.organization_id} onChange={e => setForm(f => ({ ...f, organization_id: e.target.value }))}>
@@ -332,14 +395,17 @@ export default function Teams() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Type</label>
                 <select className="input" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-                  <option value="">Default</option>
-                  <option value="inspection">Consultanat</option>
-                  <option value="contractor">Contractor</option>
-                  <option value="client">Client</option>
-                  <option value="developer">Developer</option>
-                  <option value="vendor">Vendor</option>
-                  <option value="others">Others</option>
+                  <option value="DEFAULT">DEFAULT</option>
+                  <option value="CONSULTANT">CONSULTANT</option>
+                  <option value="AUDIT">AUDIT</option>
+                  <option value="COMPLIANCE">COMPLIANCE</option>
+                  <option value="CONTRACTOR">CONTRACTOR</option>
+                  <option value="CLIENT">CLIENT</option>
+                  <option value="DEVELOPER">DEVELOPER</option>
+                  <option value="VENDOR">VENDOR</option>
+                  <option value="OTHERS">OTHERS</option>
                 </select>
+
               </div>
               {/* <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -352,10 +418,10 @@ export default function Teams() {
                 </div>
               </div> */}
               <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => setShowAdd(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
+                <button type="button" onClick={closeModal} className="btn-secondary flex-1 justify-center">Cancel</button>
                 <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  {saving ? 'Saving...' : 'Add Team'}
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : editingTeam ? <Pencil size={14} /> : <Plus size={14} />}
+                  {saving ? 'Saving...' : editingTeam ? 'Update Team' : 'Add Team'}
                 </button>
               </div>
             </form>
