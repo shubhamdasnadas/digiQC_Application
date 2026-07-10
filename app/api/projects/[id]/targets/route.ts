@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
+import { touchProject } from '@/lib/projects';
 
 interface RouteContext { params: Promise<{ id: string }>; }
 
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
         ]
       );
     }
+    await touchProject(payload.orgId!, id, payload.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

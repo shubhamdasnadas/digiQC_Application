@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
 import { listLibraryChecklists, getLibraryChecklistDetail } from '@/lib/checklistLibrary';
 import { ensureChecklistSchema } from '@/lib/checklistSchema';
+import { touchProject } from '@/lib/projects';
 import fs from 'fs';
 import path from 'path';
 
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const rows = body.rows ?? [body];
+    const touchedProjectIds = new Set<string>();
 
     for (const row of rows) {
       // 1. Handle Checklist
@@ -50,6 +52,7 @@ export async function POST(request: NextRequest) {
         [row.project_id, row.name, row.reference_number || null, row.uom || null, row.status || 'draft']
       );
       const checklistId = clRows[0].id;
+      if (row.project_id) touchedProjectIds.add(row.project_id);
 
       // If cloning from the shared library, copy over its stages/checkpoints since
       // they live in separate library_stages/library_checkpoints tables.
@@ -116,6 +119,7 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+    await Promise.all(Array.from(touchedProjectIds).map((pid) => touchProject(payload.orgId!, pid, payload.userId)));
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

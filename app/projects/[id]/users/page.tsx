@@ -24,27 +24,36 @@ const ROLE_DEFAULTS = {
   'Associate': { location: false, authentication: false, webAccess: 'Team', raiseInstruction: false },
 };
 
+interface ProjectTeamLink {
+  team_id: string;
+  team_name: string;
+}
+
 export default function UsersTab() {
   const { id } = useParams<{ id: string }>();
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [eqcs, setEqcs] = useState<EQC[]>([]);
+  const [projectTeams, setProjectTeams] = useState<ProjectTeamLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [mRes, uRes, eRes] = await Promise.all([
+    const [mRes, uRes, eRes, ptRes] = await Promise.all([
       fetch(`/api/projects/${id}/members`),
       fetch('/api/members'),
       fetch(`/api/projects/${id}/eqcs`),
+      fetch(`/api/projects/${id}/teams`),
     ]);
     const m = await mRes.json();
     const u = await uRes.json();
     const e = await eRes.json();
+    const pt = await ptRes.json();
     setMembers(Array.isArray(m) ? m : []);
     setAllMembers(Array.isArray(u) ? u : []);
     setEqcs(Array.isArray(e) ? e : []);
+    setProjectTeams(Array.isArray(pt) ? pt : []);
     setLoading(false);
   };
 
@@ -60,8 +69,32 @@ export default function UsersTab() {
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id]);
 
   const removeMember = async (userId: string) => {
-    setMembers((arr) => arr.filter((m) => m.user_id !== userId));
+    const removed = members.find((m) => m.user_id === userId);
+    const remaining = members.filter((m) => m.user_id !== userId);
+    setMembers(remaining);
     await fetch(`/api/projects/${id}/members?user_id=${userId}`, { method: 'DELETE' });
+
+    // If that was the last remaining project member from any of the removed
+    // user's teams, unlink that team from the project too.
+    const removedTeamNames = (removed?.user_teams || '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+    if (removedTeamNames.length === 0) return;
+
+    const teamsToUnlink = removedTeamNames.filter((teamName) =>
+      !remaining.some((m) => (m.user_teams || '').split(',').map((t) => t.trim().toLowerCase()).includes(teamName))
+    );
+    if (teamsToUnlink.length === 0) return;
+
+    const linkedTeamIds = projectTeams
+      .filter((pt) => teamsToUnlink.includes(pt.team_name.trim().toLowerCase()))
+      .map((pt) => pt.team_id);
+    if (linkedTeamIds.length === 0) return;
+
+    setProjectTeams((arr) => arr.filter((pt) => !linkedTeamIds.includes(pt.team_id)));
+    await Promise.all(
+      linkedTeamIds.map((teamId) =>
+        fetch(`/api/projects/${id}/teams?team_id=${teamId}`, { method: 'DELETE' })
+      )
+    );
   };
 
   const columns: Column<ProjectMember>[] = [
@@ -93,10 +126,23 @@ export default function UsersTab() {
       render: (m) => <span className="text-xs text-gray-500">{m.user_teams || '—'}</span>,
     },
     {
-      key: 'assigned_checklist', header: 'Assigned Checklist',
+      key: 'assigned_checklist', header: 'Assigned Checklists',
       render: (m) => {
         const names = assignedChecklistNames(m.user_id);
-        return <span className="text-xs text-gray-500">{names.length > 0 ? names.join(', ') : '—'}</span>;
+        if (names.length === 0) return <span className="text-xs text-gray-500">—</span>;
+        if (names.length === 1) return <span className="text-xs text-gray-500">{names[0]}</span>;
+        return (
+          <div className="relative group inline-block">
+            <span className="text-xs text-gray-500 underline decoration-dotted decoration-gray-400 underline-offset-2">
+              {names[0]} + {names.length - 1}
+            </span>
+            <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-64 max-w-xs opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 origin-top-left">
+              <div className="rounded-lg bg-gray-900 dark:bg-gray-800 text-white text-xs leading-relaxed p-3 shadow-xl border border-gray-800 dark:border-gray-700">
+                {names.join(', ')}
+              </div>
+            </div>
+          </div>
+        );
       },
     },
     {

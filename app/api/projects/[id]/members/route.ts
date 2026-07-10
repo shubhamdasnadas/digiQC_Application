@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
+import { touchProject } from '@/lib/projects';
 
 interface RouteContext { params: Promise<{ id: string }>; }
 
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
         [id, r.user_id, r.role ?? 'member']
       );
     }
+    await touchProject(payload.orgId!, id, payload.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
@@ -73,6 +75,7 @@ export async function DELETE(request: NextRequest, ctx: RouteContext) {
       `DELETE FROM project_members WHERE project_id = $1 AND user_id = $2`,
       [id, userId]
     );
+    await touchProject(payload.orgId!, id, payload.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

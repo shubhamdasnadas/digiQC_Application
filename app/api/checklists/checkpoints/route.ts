@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
 import { ensureChecklistSchema } from '@/lib/checklistSchema';
+import { touchProject } from '@/lib/projects';
 
 export async function POST(request: NextRequest) {
     const { payload, response } = requireAuth(request);
@@ -18,7 +19,9 @@ export async function POST(request: NextRequest) {
         await ensureChecklistSchema(payload.orgId!);
 
         const { rows: stageRows } = await orgQuery(payload.orgId!,
-            `SELECT 1 FROM checklist_stages WHERE id = $1 AND checklist_id = $2`,
+            `SELECT c.project_id FROM checklist_stages cs
+             JOIN checklists c ON c.id = cs.checklist_id
+             WHERE cs.id = $1 AND cs.checklist_id = $2`,
             [stage_id, checklist_id]
         );
         if (stageRows.length === 0) {
@@ -38,6 +41,7 @@ export async function POST(request: NextRequest) {
             [stage_id, nextSrNo, question, input_type || 'yes_no', !!photo_required, !!remark_required]
         );
 
+        if (stageRows[0].project_id) await touchProject(payload.orgId!, stageRows[0].project_id, payload.userId);
         return NextResponse.json({ success: true, checkpoint: rows[0] });
     } catch (error) {
         return NextResponse.json({ error: (error as Error).message }, { status: 500 });
