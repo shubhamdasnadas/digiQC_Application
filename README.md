@@ -12,9 +12,18 @@ View your app in AI Studio: https://ai.studio/apps/35b2f5b0-c11f-4b9c-8e35-67242
 
 **Prerequisites:**  Node.js
 
+The app is split into two independent projects, each with its own `package.json` and dependencies. Run each in its own terminal.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Backend (API server, port 3000):
+   ```
+   cd backend
+   npm install
+   npm run dev
+   ```
+2. Frontend (Vite dev server, port 5173, proxies `/api` to the backend):
+   ```
+   cd frontend
+   npm install
+   npm run dev
+   ```
+3. Open http://localhost:5173
