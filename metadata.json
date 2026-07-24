@@ -1,0 +1,6 @@
+{
+  "name": "DigiQC Quality Control",
+  "description": "Multi-tenant B2B Construction & Engineering Quality Control Platform with Node.js backend API and modern React frontend",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
