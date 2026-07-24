@@ -1,221 +1,241 @@
 import { Router, Request, Response } from 'express';
-import { db, Checklist, ChecklistStage, ChecklistCheckpoint } from '../db';
+import { pool, orgSchema } from '../pool';
 import { getUserFromHeader } from './auth';
-import { randomUUID as uuidv4 } from 'crypto';
 
 const router = Router();
 
+async function countsFor(schema: string, checklistId: string) {
+  const { rows } = await pool.query(
+    `SELECT count(DISTINCT cs.id)::int AS stages_count, count(cp.id)::int AS checkpoints_count
+     FROM "${schema}".checklist_stages cs
+     LEFT JOIN "${schema}".checkpoints cp ON cp.stage_id = cs.id
+     WHERE cs.checklist_id = $1`,
+    [checklistId]
+  );
+  return rows[0] || { stages_count: 0, checkpoints_count: 0 };
+}
+
 // GET /api/checklists - list checklists (org-scoped + shared library)
-router.get('/', (req: Request, res: Response) => {
-  const auth = getUserFromHeader(req);
-  const orgId = auth.currentOrg?.id || 'org-city-hospital';
+router.get('/', async (req: Request, res: Response) => {
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.json([]);
 
-  const orgChecklists = db.checklists.filter(c => c.organization_id === orgId || c.project_id === null);
+  const schema = await orgSchema(auth.currentOrg.id);
 
-  const enriched = orgChecklists.map(c => {
-    const project = db.projects.find(p => p.id === c.project_id);
-    const stages = db.stages.filter(s => s.checklist_id === c.id);
-    let totalCheckpoints = 0;
-    stages.forEach(s => {
-      totalCheckpoints += s.checkpoints?.length || 0;
-    });
+  const { rows: orgChecklists } = await pool.query(
+    `SELECT c.*, p.name AS project_name
+     FROM "${schema}".checklists c
+     JOIN "${schema}".projects p ON p.id = c.project_id
+     ORDER BY c.created_at DESC`
+  );
 
-    return {
+  const orgEnriched = await Promise.all(
+    orgChecklists.map(async (c: any) => ({
       ...c,
-      project_name: project ? project.name : 'Org Generic Library',
-      stages_count: stages.length || c.stages_count || 1,
-      checkpoints_count: totalCheckpoints || c.checkpoints_count || 5,
-    };
-  });
+      ...(await countsFor(schema, c.id)),
+      organization_id: auth.currentOrg!.id,
+      source: 'org',
+    }))
+  );
 
-  return res.json(enriched);
+  const { rows: libraryChecklists } = await pool.query(
+    `SELECT lc.*,
+            (SELECT count(*)::int FROM public.library_stages ls WHERE ls.library_checklist_id = lc.id) AS stages_count,
+            (SELECT count(*)::int FROM public.library_checkpoints lcp
+               JOIN public.library_stages ls ON ls.id = lcp.library_stage_id
+               WHERE ls.library_checklist_id = lc.id) AS checkpoints_count
+     FROM public.library_checklists lc
+     ORDER BY lc.created_at DESC`
+  );
+
+  const libraryEnriched = libraryChecklists.map((c: any) => ({
+    ...c,
+    organization_id: auth.currentOrg!.id,
+    project_id: null,
+    project_name: 'Org Generic Library',
+    uom: c.uom || '',
+    status: 'active',
+    source: 'library',
+  }));
+
+  return res.json([...orgEnriched, ...libraryEnriched]);
 });
 
-// POST /api/checklists - create new checklist or import batch
-router.post('/', (req: Request, res: Response) => {
-  const auth = getUserFromHeader(req);
-  const orgId = auth.currentOrg?.id || 'org-city-hospital';
+// POST /api/checklists - create new checklist (project-scoped)
+router.post('/', async (req: Request, res: Response) => {
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(400).json({ error: 'No active organization' });
+
+  const schema = await orgSchema(auth.currentOrg.id);
+
+  const items = Array.isArray(req.body) ? req.body : [req.body];
+  const created = [];
+
+  for (const item of items) {
+    const { name, checklist_name, project_id, reference_number, uom = '' } = item;
+    const finalName = name || checklist_name;
+
+    if (!finalName || !project_id) {
+      return res.status(400).json({ error: 'Checklist Name and Project are required' });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO "${schema}".checklists (project_id, name, reference_number, uom, status)
+       VALUES ($1, $2, $3, $4, 'draft')
+       RETURNING *`,
+      [project_id, finalName, reference_number || null, uom]
+    );
+    const newChecklist = rows[0];
+
+    if (!Array.isArray(req.body)) {
+      // Default stage for interactively-created checklists (not bulk imports)
+      await pool.query(
+        `INSERT INTO "${schema}".checklist_stages (checklist_id, sr_no, name, witness_required, drawing_required)
+         VALUES ($1, 1, 'Stage 1 - Initial Inspection', true, true)`,
+        [newChecklist.id]
+      );
+    }
+
+    created.push(newChecklist);
+  }
 
   if (Array.isArray(req.body)) {
-    // Bulk import array handler
-    const createdList: Checklist[] = [];
-    req.body.forEach((item: any) => {
-      const newChk: Checklist = {
-        id: `chk-${uuidv4().substring(0, 8)}`,
-        organization_id: orgId,
-        project_id: item.project_id || null,
-        name: item.name || item.checklist_name || 'Imported Inspection Checklist',
-        reference_number: item.reference_number || `PCPL/IMP/${uuidv4().substring(0, 6).toUpperCase()}`,
-        uom: item.uom || 'Nos',
-        status: 'active',
-        updated_by: auth.user.name,
-        updated_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        source: 'org',
-      };
-      db.checklists.unshift(newChk);
-      createdList.push(newChk);
-    });
-
-    return res.status(201).json({ success: true, count: createdList.length, checklists: createdList });
+    return res.status(201).json({ success: true, count: created.length, checklists: created });
   }
-
-  const { name, project_id = null, reference_number = '', uom = 'Nos' } = req.body;
-
-  if (!name) {
-    return res.status(400).json({ error: 'Checklist Name is required' });
-  }
-
-  const newChecklist: Checklist = {
-    id: `chk-${uuidv4().substring(0, 8)}`,
-    organization_id: orgId,
-    project_id,
-    name,
-    reference_number: reference_number || `PCPL/ARCH/${uuidv4().substring(0, 6).toUpperCase()}/2025/001`,
-    uom,
-    status: 'active',
-    stages_count: 1,
-    checkpoints_count: 0,
-    updated_by: auth.user.name,
-    updated_at: new Date().toISOString(),
-    created_at: new Date().toISOString(),
-    source: 'org',
-  };
-
-  db.checklists.unshift(newChecklist);
-
-  // Default stage for new checklist
-  const initialStage: ChecklistStage = {
-    id: `stg-${uuidv4().substring(0, 8)}`,
-    checklist_id: newChecklist.id,
-    sr_no: 1,
-    name: 'Stage 1 - Initial Inspection',
-    witness_required: true,
-    drawing_required: true,
-    checkpoints: [],
-    created_at: new Date().toISOString(),
-  };
-
-  db.stages.push(initialStage);
-
-  return res.status(201).json(newChecklist);
+  return res.status(201).json(created[0]);
 });
 
 // GET /api/checklists/:id - get checklist with stages and checkpoints
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const checklist = db.checklists.find(c => c.id === id);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(400).json({ error: 'No active organization' });
+
+  const schema = await orgSchema(auth.currentOrg.id);
+
+  const { rows: checklistRows } = await pool.query(`SELECT * FROM "${schema}".checklists WHERE id = $1`, [id]);
+  const checklist = checklistRows[0];
 
   if (!checklist) {
     return res.status(404).json({ error: 'Checklist template not found' });
   }
 
-  const stages = db.stages.filter(s => s.checklist_id === id).sort((a, b) => a.sr_no - b.sr_no);
+  const { rows: stages } = await pool.query(
+    `SELECT * FROM "${schema}".checklist_stages WHERE checklist_id = $1 ORDER BY sr_no`,
+    [id]
+  );
+  const { rows: checkpoints } = await pool.query(
+    `SELECT cp.* FROM "${schema}".checkpoints cp
+     JOIN "${schema}".checklist_stages cs ON cs.id = cp.stage_id
+     WHERE cs.checklist_id = $1
+     ORDER BY cp.sr_no`,
+    [id]
+  );
 
-  return res.json({
-    checklist,
-    stages,
-  });
+  const stagesWithCheckpoints = stages.map((s: any) => ({
+    ...s,
+    checkpoints: checkpoints.filter((cp: any) => cp.stage_id === s.id),
+  }));
+
+  return res.json({ checklist, stages: stagesWithCheckpoints });
 });
 
 // PATCH /api/checklists/:id - add stage or checkpoint, or reorder
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const auth = getUserFromHeader(req);
-  const checklist = db.checklists.find(c => c.id === id);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(400).json({ error: 'No active organization' });
 
+  const schema = await orgSchema(auth.currentOrg.id);
+
+  const { rows: checklistRows } = await pool.query(`SELECT * FROM "${schema}".checklists WHERE id = $1`, [id]);
+  const checklist = checklistRows[0];
   if (!checklist) {
     return res.status(404).json({ error: 'Checklist not found' });
   }
 
-  const { add_stage, edit_stage, delete_stage, add_checkpoint, edit_checkpoint, delete_checkpoint, reorder_stages, reorder_checkpoints } = req.body;
+  const { add_stage, edit_stage, delete_stage, add_checkpoint, edit_checkpoint, delete_checkpoint } = req.body;
 
   if (add_stage) {
-    const stageCount = db.stages.filter(s => s.checklist_id === id).length;
-    const newStage: ChecklistStage = {
-      id: `stg-${uuidv4().substring(0, 8)}`,
-      checklist_id: id,
-      sr_no: stageCount + 1,
-      name: add_stage.name || `Stage ${stageCount + 1}`,
-      witness_required: Boolean(add_stage.witness_required),
-      drawing_required: Boolean(add_stage.drawing_required),
-      checkpoints: [],
-      created_at: new Date().toISOString(),
-    };
-    db.stages.push(newStage);
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM "${schema}".checklist_stages WHERE checklist_id = $1`,
+      [id]
+    );
+    await pool.query(
+      `INSERT INTO "${schema}".checklist_stages (checklist_id, sr_no, name, witness_required, drawing_required)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, rows[0].n + 1, add_stage.name || `Stage ${rows[0].n + 1}`, Boolean(add_stage.witness_required), Boolean(add_stage.drawing_required)]
+    );
   }
 
   if (edit_stage) {
-    const stage = db.stages.find(s => s.id === edit_stage.id);
-    if (stage) {
-      if (edit_stage.name !== undefined) stage.name = edit_stage.name;
-      if (edit_stage.witness_required !== undefined) stage.witness_required = Boolean(edit_stage.witness_required);
-      if (edit_stage.drawing_required !== undefined) stage.drawing_required = Boolean(edit_stage.drawing_required);
-    }
+    await pool.query(
+      `UPDATE "${schema}".checklist_stages
+       SET name = COALESCE($2, name),
+           witness_required = COALESCE($3, witness_required),
+           drawing_required = COALESCE($4, drawing_required)
+       WHERE id = $1`,
+      [edit_stage.id, edit_stage.name ?? null, edit_stage.witness_required ?? null, edit_stage.drawing_required ?? null]
+    );
   }
 
   if (delete_stage) {
-    db.stages = db.stages.filter(s => !(s.id === delete_stage.id && s.checklist_id === id));
+    await pool.query(
+      `DELETE FROM "${schema}".checklist_stages WHERE id = $1 AND checklist_id = $2`,
+      [delete_stage.id, id]
+    );
   }
 
   if (add_checkpoint) {
-    const { stage_id, question, input_type = 'yes_no', options = [], fail_rule, drawing_required = false, witness_required = false, photo_required = false, remark_required = false } = add_checkpoint;
-    const targetStage = db.stages.find(s => s.id === stage_id);
-
-    if (targetStage) {
-      const cpCount = targetStage.checkpoints.length;
-      const newCp: ChecklistCheckpoint = {
-        id: `cp-${uuidv4().substring(0, 8)}`,
-        stage_id,
-        sr_no: cpCount + 1,
-        question,
-        input_type,
-        options,
-        fail_rule,
-        drawing_required: Boolean(drawing_required),
-        witness_required: Boolean(witness_required),
-        photo_required: Boolean(photo_required),
-        remark_required: Boolean(remark_required),
-        created_at: new Date().toISOString(),
-      };
-      targetStage.checkpoints.push(newCp);
-    }
+    const { stage_id, question, input_type = 'yes_no', drawing_required = false, witness_required = false, photo_required = false, remark_required = false } = add_checkpoint;
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM "${schema}".checkpoints WHERE stage_id = $1`,
+      [stage_id]
+    );
+    await pool.query(
+      `INSERT INTO "${schema}".checkpoints
+         (stage_id, sr_no, question, input_type, drawing_required, witness_required, photo_required, remark_required)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [stage_id, rows[0].n + 1, question, input_type, Boolean(drawing_required), Boolean(witness_required), Boolean(photo_required), Boolean(remark_required)]
+    );
   }
 
   if (edit_checkpoint) {
-    const { id: cpId, stage_id, question, input_type, options, fail_rule, drawing_required, witness_required, photo_required, remark_required } = edit_checkpoint;
-    const targetStage = db.stages.find(s => s.id === stage_id);
-    if (targetStage && targetStage.checkpoints) {
-      const cpIndex = targetStage.checkpoints.findIndex(c => c.id === cpId);
-      if (cpIndex !== -1) {
-        targetStage.checkpoints[cpIndex] = {
-          ...targetStage.checkpoints[cpIndex],
-          ...(question !== undefined && { question }),
-          ...(input_type !== undefined && { input_type }),
-          ...(options !== undefined && { options }),
-          ...(fail_rule !== undefined && { fail_rule }),
-          ...(drawing_required !== undefined && { drawing_required: Boolean(drawing_required) }),
-          ...(witness_required !== undefined && { witness_required: Boolean(witness_required) }),
-          ...(photo_required !== undefined && { photo_required: Boolean(photo_required) }),
-          ...(remark_required !== undefined && { remark_required: Boolean(remark_required) }),
-        };
-      }
-    }
+    const { id: cpId, question, input_type, drawing_required, witness_required, photo_required, remark_required } = edit_checkpoint;
+    await pool.query(
+      `UPDATE "${schema}".checkpoints
+       SET question = COALESCE($2, question),
+           input_type = COALESCE($3, input_type),
+           drawing_required = COALESCE($4, drawing_required),
+           witness_required = COALESCE($5, witness_required),
+           photo_required = COALESCE($6, photo_required),
+           remark_required = COALESCE($7, remark_required)
+       WHERE id = $1`,
+      [cpId, question ?? null, input_type ?? null, drawing_required ?? null, witness_required ?? null, photo_required ?? null, remark_required ?? null]
+    );
   }
 
   if (delete_checkpoint) {
-    const { id: cpId, stage_id } = delete_checkpoint;
-    const targetStage = db.stages.find(s => s.id === stage_id);
-    if (targetStage && targetStage.checkpoints) {
-      targetStage.checkpoints = targetStage.checkpoints.filter(c => c.id !== cpId);
-    }
+    await pool.query(`DELETE FROM "${schema}".checkpoints WHERE id = $1`, [delete_checkpoint.id]);
   }
 
-  checklist.updated_by = auth.user.name;
-  checklist.updated_at = new Date().toISOString();
+  const { rows: stages } = await pool.query(
+    `SELECT * FROM "${schema}".checklist_stages WHERE checklist_id = $1 ORDER BY sr_no`,
+    [id]
+  );
+  const { rows: checkpoints } = await pool.query(
+    `SELECT cp.* FROM "${schema}".checkpoints cp
+     JOIN "${schema}".checklist_stages cs ON cs.id = cp.stage_id
+     WHERE cs.checklist_id = $1
+     ORDER BY cp.sr_no`,
+    [id]
+  );
+  const stagesWithCheckpoints = stages.map((s: any) => ({
+    ...s,
+    checkpoints: checkpoints.filter((cp: any) => cp.stage_id === s.id),
+  }));
 
-  const stages = db.stages.filter(s => s.checklist_id === id);
-  return res.json({ checklist, stages });
+  return res.json({ checklist, stages: stagesWithCheckpoints });
 });
 
 export default router;

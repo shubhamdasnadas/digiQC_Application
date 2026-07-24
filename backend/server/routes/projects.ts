@@ -1,37 +1,45 @@
 import { Router, Request, Response } from 'express';
-import { db, Project } from '../db';
+import { pool, orgSchema } from '../pool';
 import { getUserFromHeader } from './auth';
-import { randomUUID as uuidv4 } from 'crypto';
 
 const router = Router();
 
 // GET /api/projects - list projects for active org
-router.get('/', (req: Request, res: Response) => {
-  const auth = getUserFromHeader(req);
-  const orgId = auth.currentOrg?.id || 'org-city-hospital';
+router.get('/', async (req: Request, res: Response) => {
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.json([]);
 
-  const projects = db.projects.filter(p => p.organization_id === orgId);
+  const schema = await orgSchema(auth.currentOrg.id);
 
-  // Attach members count & user roles
-  const result = projects.map(p => {
-    const members = db.projectMembers.filter(m => m.project_id === p.id);
-    const myMember = members.find(m => m.user_id === auth.user.id);
+  const { rows: projects } = await pool.query(`SELECT * FROM "${schema}".projects ORDER BY created_at DESC`);
 
-    return {
-      ...p,
-      members_count: members.length,
-      assigned_users: members.map(m => m.user_name),
-      my_role: myMember ? myMember.role : 'admin',
-    };
-  });
+  const result = await Promise.all(
+    projects.map(async (p: any) => {
+      const { rows: members } = await pool.query(
+        `SELECT pm.*, u.name AS user_name, u.email AS user_email
+         FROM "${schema}".project_members pm
+         JOIN public.users u ON u.id = pm.user_id
+         WHERE pm.project_id = $1`,
+        [p.id]
+      );
+      const myMember = members.find((m: any) => m.user_id === auth.user.id);
+
+      return {
+        ...p,
+        members_count: members.length,
+        assigned_users: members.map((m: any) => m.user_name),
+        my_role: myMember ? myMember.role : 'admin',
+      };
+    })
+  );
 
   return res.json(result);
 });
 
 // POST /api/projects - create new project
-router.post('/', (req: Request, res: Response) => {
-  const auth = getUserFromHeader(req);
-  const orgId = auth.currentOrg?.id || 'org-city-hospital';
+router.post('/', async (req: Request, res: Response) => {
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(400).json({ error: 'No active organization' });
 
   const {
     name,
@@ -44,7 +52,7 @@ router.post('/', (req: Request, res: Response) => {
     project_admin_id = auth.user.id,
     radius_m = 100,
     timezone = 'Asia/Calcutta',
-    latitude = 19.0760,
+    latitude = 19.076,
     longitude = 72.8777,
     address = 'Mumbai, Maharashtra',
     perm_location = true,
@@ -58,94 +66,110 @@ router.post('/', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Project Name and Unique Code are required' });
   }
 
-  const newProject: Project = {
-    id: `proj-${uuidv4().substring(0, 8)}`,
-    organization_id: orgId,
-    name,
-    nomenclature: nomenclature || name.substring(0, 3).toUpperCase() + '-01',
-    unique_code,
-    client_name: client_name || 'Standard Client',
-    profile: profile || 'General Civil Construction',
-    instruction: instruction || 'Strict QC inspection mandatory prior to work progress.',
-    description: description || 'Construction QC project',
-    project_admin_id,
-    radius_m: Number(radius_m) || 100,
-    timezone: timezone || 'Asia/Calcutta',
-    latitude: Number(latitude) || 19.0760,
-    longitude: Number(longitude) || 72.8777,
-    address,
-    perm_location: Boolean(perm_location),
-    perm_authentication: Boolean(perm_authentication),
-    perm_rfi: Boolean(perm_rfi),
-    image_url: image_url || 'https://images.pexels.com/photos/1216589/pexels-photo-1216589.jpeg',
-    status: status as 'active' | 'completed' | 'on_hold',
-    updated_by: auth.user.name,
-    updated_at: new Date().toISOString(),
-    created_at: new Date().toISOString(),
-  };
+  const schema = await orgSchema(auth.currentOrg.id);
 
-  db.projects.unshift(newProject);
+  const { rows } = await pool.query(
+    `INSERT INTO "${schema}".projects
+       (organization_id, name, nomenclature, unique_code, client_name, profile, instruction, description,
+        project_admin_id, radius_m, timezone, latitude, longitude, address,
+        perm_location, perm_authentication, perm_rfi, image_url, status, updated_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+     RETURNING *`,
+    [
+      auth.currentOrg.id,
+      name,
+      nomenclature || name.substring(0, 3).toUpperCase() + '-01',
+      unique_code,
+      client_name || 'Standard Client',
+      profile || 'General Civil Construction',
+      instruction || 'Strict QC inspection mandatory prior to work progress.',
+      description || 'Construction QC project',
+      project_admin_id,
+      Number(radius_m) || 100,
+      timezone || 'Asia/Calcutta',
+      Number(latitude) || 19.076,
+      Number(longitude) || 72.8777,
+      address,
+      Boolean(perm_location),
+      Boolean(perm_authentication),
+      Boolean(perm_rfi),
+      image_url || 'https://images.pexels.com/photos/1216589/pexels-photo-1216589.jpeg',
+      status,
+      auth.user.id,
+    ]
+  );
+  const newProject = rows[0];
 
-  // Add project creator as project admin
-  db.projectMembers.push({
-    id: `pm-${uuidv4().substring(0, 8)}`,
-    project_id: newProject.id,
-    user_id: auth.user.id,
-    user_name: auth.user.name,
-    user_email: auth.user.email,
-    role: 'admin',
-    added_at: new Date().toISOString(),
-  });
+  await pool.query(
+    `INSERT INTO "${schema}".project_members (project_id, user_id, role) VALUES ($1, $2, 'admin')`,
+    [newProject.id, auth.user.id]
+  );
 
   return res.status(201).json(newProject);
 });
 
 // GET /api/projects/:id - single project detail
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const project = db.projects.find(p => p.id === id);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(404).json({ error: 'Project not found' });
 
-  if (!project) {
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(`SELECT * FROM "${schema}".projects WHERE id = $1`, [id]);
+
+  if (!rows[0]) {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  return res.json(project);
+  return res.json(rows[0]);
 });
 
 // PATCH /api/projects/:id - update project
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const auth = getUserFromHeader(req);
-  const projectIndex = db.projects.findIndex(p => p.id === id);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(404).json({ error: 'Project not found' });
 
-  if (projectIndex === -1) {
+  const schema = await orgSchema(auth.currentOrg.id);
+
+  const editable = [
+    'name', 'nomenclature', 'instruction', 'profile', 'image_url', 'status', 'unique_code',
+    'client_name', 'description', 'project_admin_id', 'radius_m', 'timezone', 'latitude',
+    'longitude', 'address', 'perm_location', 'perm_authentication', 'perm_rfi',
+  ];
+  const sets: string[] = [];
+  const values: any[] = [];
+  editable.forEach((key) => {
+    if (req.body[key] !== undefined) {
+      values.push(req.body[key]);
+      sets.push(`${key} = $${values.length}`);
+    }
+  });
+  values.push(auth.user.id);
+  sets.push(`updated_by = $${values.length}`);
+  sets.push('updated_at = now()');
+  values.push(id);
+
+  const { rows } = await pool.query(
+    `UPDATE "${schema}".projects SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING *`,
+    values
+  );
+
+  if (!rows[0]) {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  db.projects[projectIndex] = {
-    ...db.projects[projectIndex],
-    ...req.body,
-    updated_by: auth.user.name,
-    updated_at: new Date().toISOString(),
-  };
-
-  return res.json(db.projects[projectIndex]);
+  return res.json(rows[0]);
 });
 
 // DELETE /api/projects/:id - delete project
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const idx = db.projects.findIndex(p => p.id === id);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.json({ success: true });
 
-  if (idx !== -1) {
-    db.projects.splice(idx, 1);
-    // Delete cascading project relations
-    db.eqcs = db.eqcs.filter(e => e.project_id !== id);
-    db.issues = db.issues.filter(i => i.project_id !== id);
-    db.registerEntries = db.registerEntries.filter(r => r.project_id !== id);
-    db.projectTargets = db.projectTargets.filter(t => t.project_id !== id);
-    db.projectMembers = db.projectMembers.filter(m => m.project_id !== id);
-  }
+  const schema = await orgSchema(auth.currentOrg.id);
+  await pool.query(`DELETE FROM "${schema}".projects WHERE id = $1`, [id]);
 
   return res.json({ success: true });
 });
@@ -153,174 +177,209 @@ router.delete('/:id', (req: Request, res: Response) => {
 // === SUB-RESOURCES FOR PROJECT DETAIL WORKSPACE ===
 
 // EQCs
-router.get('/:id/eqcs', (req: Request, res: Response) => {
+router.get('/:id/eqcs', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const eqcs = db.eqcs.filter(e => e.project_id === id);
-  return res.json(eqcs);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.json([]);
+
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(
+    `SELECT e.*, c.name AS checklist_name, u.name AS inspected_by_name, a.name AS approver_name
+     FROM "${schema}".eqcs e
+     LEFT JOIN "${schema}".checklists c ON c.id = e.checklist_id
+     LEFT JOIN public.users u ON u.id = e.inspected_by
+     LEFT JOIN public.users a ON a.id = e.approver_id
+     WHERE e.project_id = $1
+     ORDER BY e.created_at DESC`,
+    [id]
+  );
+  return res.json(rows);
 });
 
-router.post('/:id/eqcs', (req: Request, res: Response) => {
+router.post('/:id/eqcs', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const auth = getUserFromHeader(req);
-  const { location, checklist_id, checklist_name, stage_index = 1, total_stages = 3, status = 'passed', notes = '' } = req.body;
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(400).json({ error: 'No active organization' });
+
+  const { location, checklist_id, stage_index = 1, total_stages = 3, status = 'passed', notes = '' } = req.body;
 
   if (!location || !checklist_id) {
     return res.status(400).json({ error: 'Location and Checklist selection are required' });
   }
 
-  const newEqc = {
-    id: `eqc-${uuidv4().substring(0, 8)}`,
-    project_id: id,
-    location,
-    checklist_id,
-    checklist_name: checklist_name || 'Standard Inspection Checklist',
-    stage_index: Number(stage_index),
-    total_stages: Number(total_stages),
-    stage_result: (status === 'passed' ? 'pass' : status === 'failed' ? 'fail' : 'pending') as 'pass' | 'fail' | 'pending',
-    status: status as 'passed' | 'failed' | 'pending' | 'rfi',
-    approver_id: auth.user.id,
-    approver_name: auth.user.name,
-    approver_log: 'QC Inspection logged and evaluated by field engineer.',
-    inspected_by: auth.user.name,
-    inspected_at: new Date().toISOString(),
-    notes,
-    created_at: new Date().toISOString(),
-  };
+  const stageResult = status === 'passed' ? 'pass' : status === 'failed' ? 'fail' : 'pending';
+  const schema = await orgSchema(auth.currentOrg.id);
 
-  db.eqcs.unshift(newEqc);
-  return res.status(201).json(newEqc);
+  const { rows } = await pool.query(
+    `INSERT INTO "${schema}".eqcs
+       (project_id, location, checklist_id, stage_index, total_stages, stage_result, status,
+        approver_id, approver_log, inspected_by, inspected_at, notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), $11)
+     RETURNING *`,
+    [
+      id, location, checklist_id, Number(stage_index), Number(total_stages), stageResult, status,
+      auth.user.id, 'QC Inspection logged and evaluated by field engineer.', auth.user.id, notes,
+    ]
+  );
+
+  return res.status(201).json(rows[0]);
 });
 
 // Issues
-router.get('/:id/issues', (req: Request, res: Response) => {
+router.get('/:id/issues', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const issues = db.issues.filter(i => i.project_id === id);
-  return res.json(issues);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.json([]);
+
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(
+    `SELECT i.*, u.name AS assignee_name
+     FROM "${schema}".issues i
+     LEFT JOIN public.users u ON u.id = i.assignee_id
+     WHERE i.project_id = $1
+     ORDER BY i.created_at DESC`,
+    [id]
+  );
+  return res.json(rows);
 });
 
-router.post('/:id/issues', (req: Request, res: Response) => {
+router.post('/:id/issues', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const auth = getUserFromHeader(req);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(400).json({ error: 'No active organization' });
+
   const { title, description = '', severity = 'medium', status = 'open', assignee_id, due_date } = req.body;
 
   if (!title) {
     return res.status(400).json({ error: 'Issue Title is required' });
   }
 
-  const assignee = db.users.find(u => u.id === assignee_id);
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(
+    `INSERT INTO "${schema}".issues (project_id, title, description, severity, status, assignee_id, reported_by, due_date)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING *`,
+    [
+      id, title, description, severity, status, assignee_id || null, auth.user.id,
+      due_date || new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().split('T')[0],
+    ]
+  );
 
-  const newIssue = {
-    id: `iss-${uuidv4().substring(0, 8)}`,
-    project_id: id,
-    title,
-    description,
-    severity: severity as 'low' | 'medium' | 'high' | 'critical',
-    status: status as 'open' | 'in_progress' | 'resolved' | 'closed',
-    assignee_id,
-    assignee_name: assignee ? assignee.name : 'Unassigned',
-    reported_by: auth.user.name,
-    due_date: due_date || new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().split('T')[0],
-    created_at: new Date().toISOString(),
-  };
-
-  db.issues.unshift(newIssue);
-  return res.status(201).json(newIssue);
+  return res.status(201).json(rows[0]);
 });
 
 // Register (Documents & Drawings)
-router.get('/:id/register', (req: Request, res: Response) => {
+router.get('/:id/register', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const entries = db.registerEntries.filter(r => r.project_id === id);
-  return res.json(entries);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.json([]);
+
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(
+    `SELECT * FROM "${schema}".register_entries WHERE project_id = $1 ORDER BY created_at DESC`,
+    [id]
+  );
+  return res.json(rows);
 });
 
-router.post('/:id/register', (req: Request, res: Response) => {
+router.post('/:id/register', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(400).json({ error: 'No active organization' });
+
   const { document_no, title, revision = 'R0', status = 'active', file_url = '' } = req.body;
 
   if (!title) {
     return res.status(400).json({ error: 'Document Title is required' });
   }
 
-  const newEntry = {
-    id: `reg-${uuidv4().substring(0, 8)}`,
-    project_id: id,
-    document_no: document_no || `DWG-${uuidv4().substring(0, 6).toUpperCase()}`,
-    title,
-    revision,
-    status: status as 'active' | 'superseded' | 'void',
-    file_url: file_url || 'https://example.com/drawings/sample-plan.pdf',
-    created_at: new Date().toISOString(),
-  };
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(
+    `INSERT INTO "${schema}".register_entries (project_id, document_no, title, revision, status, file_url)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [id, document_no || '', title, revision, status, file_url]
+  );
 
-  db.registerEntries.unshift(newEntry);
-  return res.status(201).json(newEntry);
+  return res.status(201).json(rows[0]);
 });
 
 // Members
-router.get('/:id/members', (req: Request, res: Response) => {
+router.get('/:id/members', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const members = db.projectMembers.filter(m => m.project_id === id);
-  return res.json(members);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.json([]);
+
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(
+    `SELECT pm.*, u.name AS user_name, u.email AS user_email
+     FROM "${schema}".project_members pm
+     JOIN public.users u ON u.id = pm.user_id
+     WHERE pm.project_id = $1`,
+    [id]
+  );
+  return res.json(rows);
 });
 
-router.post('/:id/members', (req: Request, res: Response) => {
+router.post('/:id/members', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(400).json({ error: 'No active organization' });
+
   const { user_id, role = 'member' } = req.body;
 
-  const targetUser = db.users.find(u => u.id === user_id);
+  const { rows: userRows } = await pool.query('SELECT id, name, email FROM public.users WHERE id = $1', [user_id]);
+  const targetUser = userRows[0];
   if (!targetUser) {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  const existing = db.projectMembers.find(m => m.project_id === id && m.user_id === user_id);
-  if (existing) {
-    existing.role = role;
-    return res.json(existing);
-  }
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(
+    `INSERT INTO "${schema}".project_members (project_id, user_id, role)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (project_id, user_id) DO UPDATE SET role = EXCLUDED.role
+     RETURNING *`,
+    [id, targetUser.id, role]
+  );
 
-  const newMember = {
-    id: `pm-${uuidv4().substring(0, 8)}`,
-    project_id: id,
-    user_id: targetUser.id,
-    user_name: targetUser.name,
-    user_email: targetUser.email,
-    role: role as 'admin' | 'member' | 'inspector' | 'approver' | 'viewer',
-    added_at: new Date().toISOString(),
-  };
-
-  db.projectMembers.push(newMember);
-  return res.status(201).json(newMember);
+  return res.status(201).json({ ...rows[0], user_name: targetUser.name, user_email: targetUser.email });
 });
 
 // Targets
-router.get('/:id/targets', (req: Request, res: Response) => {
+router.get('/:id/targets', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const targets = db.projectTargets.filter(t => t.project_id === id);
-  return res.json(targets);
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.json([]);
+
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(
+    `SELECT * FROM "${schema}".project_targets WHERE project_id = $1 ORDER BY created_at DESC`,
+    [id]
+  );
+  return res.json(rows);
 });
 
-router.post('/:id/targets', (req: Request, res: Response) => {
+router.post('/:id/targets', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const auth = await getUserFromHeader(req);
+  if (!auth.currentOrg) return res.status(400).json({ error: 'No active organization' });
+
   const { metric, target_value = 100, current_value = 0, unit = 'Units', period = 'monthly' } = req.body;
 
   if (!metric) {
     return res.status(400).json({ error: 'Metric title is required' });
   }
 
-  const newTarget = {
-    id: `tar-${uuidv4().substring(0, 8)}`,
-    project_id: id,
-    metric,
-    target_value: Number(target_value),
-    current_value: Number(current_value),
-    unit,
-    period: period as 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'project',
-    created_at: new Date().toISOString(),
-  };
+  const schema = await orgSchema(auth.currentOrg.id);
+  const { rows } = await pool.query(
+    `INSERT INTO "${schema}".project_targets (project_id, metric, target_value, current_value, unit, period)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [id, metric, Number(target_value), Number(current_value), unit, period]
+  );
 
-  db.projectTargets.unshift(newTarget);
-  return res.status(201).json(newTarget);
+  return res.status(201).json(rows[0]);
 });
 
 export default router;
