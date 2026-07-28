@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
+import { touchProject } from '@/lib/projects';
 
 interface RouteContext { params: Promise<{ id: string }>; }
 
 /**
  * GET /api/projects/[id]/members
- * Returns the project's members (joined with name/email from public.users).
+ * Returns the project's members (joined with name/email from the org's members roster).
  */
 export async function GET(request: NextRequest, ctx: RouteContext) {
   const { payload, response } = requireAuth(request);
@@ -16,9 +17,9 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
     const { rows } = await orgQuery(
       payload.orgId!,
       `SELECT pm.id, pm.project_id, pm.user_id, pm.role, pm.added_at,
-              u.name AS user_name, u.email AS user_email, u.avatar_url AS user_avatar
+              m.name AS user_name, m.email AS user_email, m.teams AS user_teams
        FROM project_members pm
-       JOIN public.users u ON u.id = pm.user_id
+       JOIN members m ON m.id = pm.user_id
        WHERE pm.project_id = $1
        ORDER BY pm.added_at`,
       [id]
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
 
 /**
  * POST /api/projects/[id]/members
- * Body: { user_id, role }
+ * Body: { rows: [{ user_id, role }] } — user_id refers to members.id.
  * Idempotent — ON CONFLICT updates the role.
  */
 export async function POST(request: NextRequest, ctx: RouteContext) {
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
         [id, r.user_id, r.role ?? 'member']
       );
     }
+    await touchProject(payload.orgId!, id, payload.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
@@ -73,6 +75,7 @@ export async function DELETE(request: NextRequest, ctx: RouteContext) {
       `DELETE FROM project_members WHERE project_id = $1 AND user_id = $2`,
       [id, userId]
     );
+    await touchProject(payload.orgId!, id, payload.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

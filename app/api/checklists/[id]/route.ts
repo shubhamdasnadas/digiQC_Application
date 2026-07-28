@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
 import { getLibraryChecklistDetail } from '@/lib/checklistLibrary';
+import { touchProject } from '@/lib/projects';
 
 export async function GET(
     request: NextRequest,
@@ -67,6 +68,9 @@ export async function PATCH(
     const { id } = await params;
 
     try {
+        const { rows: existing } = await orgQuery(payload.orgId!, `SELECT project_id FROM checklists WHERE id = $1`, [id]);
+        const projectId = existing[0]?.project_id;
+
         const body = await request.json();
         const { name, reference_number, uom, status, reorder_stages, reorder_checkpoints } = body;
 
@@ -105,6 +109,34 @@ export async function PATCH(
             }
         }
 
+        if (projectId) await touchProject(payload.orgId!, projectId, payload.userId);
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    }
+}
+
+export async function DELETE(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { payload, response } = requireAuth(request);
+    if (!payload) return response;
+
+    const { id } = await params;
+
+    try {
+        const { rows: existing } = await orgQuery(payload.orgId!, `SELECT project_id FROM checklists WHERE id = $1`, [id]);
+        const projectId = existing[0]?.project_id;
+
+        await orgQuery(payload.orgId!,
+            `DELETE FROM checkpoints WHERE stage_id IN (SELECT id FROM checklist_stages WHERE checklist_id = $1)`,
+            [id]
+        );
+        await orgQuery(payload.orgId!, `DELETE FROM checklist_stages WHERE checklist_id = $1`, [id]);
+        await orgQuery(payload.orgId!, `DELETE FROM checklists WHERE id = $1`, [id]);
+
+        if (projectId) await touchProject(payload.orgId!, projectId, payload.userId);
         return NextResponse.json({ success: true });
     } catch (error) {
         return NextResponse.json({ error: (error as Error).message }, { status: 500 });

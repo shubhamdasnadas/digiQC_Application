@@ -15,6 +15,8 @@ interface ProjectTeamRow {
   team_type: string;
   team_lead_name: string;
   spoc_name: string;
+  assigned_checklist: string;
+  assigned_user: string;
   added_at: string;
 }
 
@@ -45,12 +47,30 @@ export default function TeamsTab() {
     await fetch(`/api/projects/${id}/teams?team_id=${teamId}`, { method: 'DELETE' });
   };
 
+  const renderCommaList = (value: string) => {
+    const names = value.split(',').map((s) => s.trim()).filter(Boolean);
+    if (names.length === 0) return <span className="text-xs text-gray-700 dark:text-gray-300">—</span>;
+    if (names.length === 1) return <span className="text-xs text-gray-700 dark:text-gray-300">{names[0]}</span>;
+    return (
+      <div className="relative group inline-block">
+        <span className="text-xs text-gray-700 dark:text-gray-300 underline decoration-dotted decoration-gray-400 underline-offset-2">
+          {names[0]} + {names.length - 1}
+        </span>
+        <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-64 max-w-xs opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 origin-top-left">
+          <div className="rounded-lg bg-gray-900 dark:bg-gray-800 text-white text-xs leading-relaxed p-3 shadow-xl border border-gray-800 dark:border-gray-700">
+            {names.join(', ')}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const columns: Column<ProjectTeamRow>[] = [
     { key: 'idx', header: '#', width: '50px', render: (_r, i) => <span className="text-gray-500 text-xs">{i + 1}</span> },
     { key: 'name', header: 'Team Name', render: (r) => <span className="text-sm font-medium text-gray-900 dark:text-white">{r.team_name}</span> },
     { key: 'type', header: 'Type', render: (r) => <span className="badge badge-on_hold text-xs capitalize">{r.team_type || '—'}</span> },
-    { key: 'lead', header: 'Team Lead', render: (r) => <span className="text-xs text-gray-700 dark:text-gray-300">{r.team_lead_name || '—'}</span> },
-    { key: 'spoc', header: 'SPOC', render: (r) => <span className="text-xs text-gray-700 dark:text-gray-300">{r.spoc_name || '—'}</span> },
+    { key: 'assigned_user', header: 'Assigned User', render: (r) => renderCommaList(r.assigned_user || '') },
+    { key: 'assigned_checklist', header: 'Assigned Checklist', render: (r) => renderCommaList(r.assigned_checklist || '') },
     {
       key: 'actions', header: '',
       render: (r) => (

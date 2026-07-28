@@ -22,9 +22,9 @@ const DEFAULT_FORM = {
         { value: 'No', qc_fail: true }
     ],
     numeric_condition: {
+        operator: '<=',
         value: '',
-        qc_fail: false,
-        qc_pass: false
+        qc_result: 'fail' as 'fail' | 'pass'
     }
 };
 
@@ -75,7 +75,7 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
         setForm({ ...form, options: newOptions });
     };
 
-    const updateNumericCondition = (field: 'value' | 'qc_fail' | 'qc_pass', val: any) => {
+    const updateNumericCondition = (field: 'operator' | 'value' | 'qc_result', val: any) => {
         setForm({
             ...form,
             numeric_condition: { ...form.numeric_condition, [field]: val }
@@ -173,42 +173,44 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-3 gap-6 items-end">
                         <div className="col-span-1">
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Type</label>
-                            <select
-                                value={form.input_type}
-                                onChange={(e) => setForm({ ...form, input_type: e.target.value })}
-                                className="w-full p-2 border-2 border-orange-400 rounded-full text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 outline-none appearance-none px-3"
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Type</label>
+                            <div className="relative">
+                                <select
+                                    value={form.input_type}
+                                    onChange={(e) => setForm({ ...form, input_type: e.target.value })}
+                                    className="w-full p-2.5 border border-gray-300 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none px-3"
+                                >
+                                    <option value="yes_no">Yes/No</option>
+                                    <option value="options">Options</option>
+                                    <option value="text">Text</option>
+                                    <option value="numeric">Numeric</option>
+                                </select>
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-span-1">
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">EQC Photo Required</label>
+                            <button 
+                                type="button"
+                                onClick={() => setForm(f => ({ ...f, photo_required: !f.photo_required }))}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${form.photo_required ? 'bg-gray-400' : 'bg-gray-200 dark:bg-gray-700'}`}
                             >
-                                <option value="yes_no">Yes/No</option>
-                                <option value="options">Options</option>
-                                <option value="text">Text</option>
-                                <option value="numeric">Numeric</option>
-                                <option value="date">Date</option>
-                            </select>
+                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${form.photo_required ? 'left-6' : 'left-1'}`} />
+                            </button>
                         </div>
                         <div className="col-span-1">
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">EQC Photo</label>
-                            <div className="flex items-center h-9">
-                                <input
-                                    type="checkbox"
-                                    checked={form.photo_required}
-                                    onChange={(e) => setForm({ ...form, photo_required: e.target.checked })}
-                                    className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-                                />
-                            </div>
-                        </div>
-                        <div className="col-span-1">
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Remarks</label>
-                            <div className="flex items-center h-9">
-                                <input
-                                    type="checkbox"
-                                    checked={form.remark_required}
-                                    onChange={(e) => setForm({ ...form, remark_required: e.target.checked })}
-                                    className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-                                />
-                            </div>
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Remarks Required</label>
+                            <button 
+                                type="button"
+                                onClick={() => setForm(f => ({ ...f, remark_required: !f.remark_required }))}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${form.remark_required ? 'bg-gray-400' : 'bg-gray-200 dark:bg-gray-700'}`}
+                            >
+                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${form.remark_required ? 'left-6' : 'left-1'}`} />
+                            </button>
                         </div>
                     </div>
 
@@ -270,45 +272,62 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
                     )}
 
                     {form.input_type === 'numeric' && (
-                        <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800 space-y-4">
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Numeric Condition</h3>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-gray-700 dark:text-gray-300">
-                                <span className="text-gray-500">If value is</span>
+                        <div className="space-y-4 pt-4 border-t border-dashed border-gray-300 dark:border-gray-700">
+                            <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
+                                <span className="text-gray-600 dark:text-gray-400">If value is</span>
+                                <div className="relative">
+                                    <select 
+                                        value={form.numeric_condition.operator}
+                                        onChange={(e) => updateNumericCondition('operator', e.target.value)}
+                                        className="p-2 border border-orange-400 rounded-full text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none px-3 pr-8"
+                                    >
+                                        {['<=', '>=', '=', '<', '>'].map(op => (
+                                            <option key={op} value={op}>{op}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                    </div>
+                                </div>
                                 <input
-                                    type="text"
+                                    type="number"
                                     value={form.numeric_condition.value}
                                     onChange={(e) => updateNumericCondition('value', e.target.value)}
-                                    className="p-1.5 border border-gray-200 dark:border-gray-700 rounded-full bg-white dark:bg-gray-800 text-xs outline-none focus:ring-2 focus:ring-orange-500 w-24 px-3"
-                                    placeholder="value"
+                                    className="p-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-orange-500 w-32 px-3"
+                                    placeholder="Enter Number"
                                 />
-                                <span className="text-gray-500">then,</span>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={form.numeric_condition.qc_fail}
-                                        onChange={(e) => updateNumericCondition('qc_fail', e.target.checked)}
-                                        className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-                                    />
-                                    <span className="text-gray-500">QC Fail</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={form.numeric_condition.qc_pass}
-                                        onChange={(e) => updateNumericCondition('qc_pass', e.target.checked)}
-                                        className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-                                    />
-                                    <span className="text-gray-500">QC Pass</span>
+                                <span className="text-gray-600 dark:text-gray-400">then,</span>
+                                <div className="flex items-center gap-4 ml-2">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input 
+                                            type="radio" 
+                                            name="qc_result" 
+                                            checked={form.numeric_condition.qc_result === 'fail'} 
+                                            onChange={() => updateNumericCondition('qc_result', 'fail')}
+                                            className="w-4 h-4 text-orange-500 focus:ring-orange-500"
+                                        />
+                                        <span className="text-xs text-gray-600 dark:text-gray-400">Mark for QC fail</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input 
+                                            type="radio" 
+                                            name="qc_result" 
+                                            checked={form.numeric_condition.qc_result === 'pass'} 
+                                            onChange={() => updateNumericCondition('qc_result', 'pass')}
+                                            className="w-4 h-4 text-orange-500 focus:ring-orange-500"
+                                        />
+                                        <span className="text-xs text-gray-600 dark:text-gray-400">Mark for QC pass</span>
+                                    </label>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    <div className="flex justify-end gap-3 pt-4">
+                    <div className="flex justify-end gap-3 pt-6">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-6 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                            className="px-6 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                         >
                             Cancel
                         </button>

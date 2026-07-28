@@ -5,25 +5,25 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
     ArrowLeft,
     Plus,
-    Download,
-    Upload,
-    Edit3,
     GripVertical,
     Trash2,
     Pencil,
     CheckCircle2,
-    XCircle
+    XCircle,
+    Rocket,
+    X,
+    Loader2,
 } from 'lucide-react';
-import { Checklist, ChecklistStage, Checkpoint } from '@/lib/types';
+import { Checklist, ChecklistStage, Checkpoint, ProjectMember, ProjectTeam } from '@/lib/types';
 import StageFormModal from '@/components/StageFormModal';
 import CheckpointFormModal from '@/components/CheckpointFormModal';
-import EditChecklistModal from '@/components/EditChecklistModal';
 
-export default function ChecklistDetail() {
+export default function ProjectChecklistDetail() {
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const id = params.id as string;
+    const projectId = params.id as string;
+    const checklistId = params.checklistId as string;
     const initialName = searchParams.get('name');
 
     const [checklist, setChecklist] = useState<Checklist | null>(null);
@@ -32,22 +32,20 @@ export default function ChecklistDetail() {
     const [activeStageId, setActiveStageId] = useState<string | null>(null);
     const [isStageModalOpen, setIsStageModalOpen] = useState(false);
     const [isCheckpointModalOpen, setIsCheckpointModalOpen] = useState(false);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isLiveModalOpen, setIsLiveModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/checklists/${id}`);
+            const res = await fetch(`/api/checklists/${checklistId}`);
             if (!res.ok) throw new Error('Failed to fetch checklist');
             const data = await res.json();
 
             setChecklist(data);
             setStages(data.stages);
             setCheckpoints(data.checkpoints);
-            // Removed auto-selection of first stage to match demo behavior
-            // where user must select a stage to view checkpoints.
         } catch (error) {
             console.error('Error loading checklist:', error);
         } finally {
@@ -57,14 +55,14 @@ export default function ChecklistDetail() {
 
     useEffect(() => {
         loadData();
-    }, [id]);
+    }, [checklistId]);
 
     const handleReorderStages = async (newStages: ChecklistStage[]) => {
         const stageIds = newStages.map(s => s.id);
         setStages(newStages);
         setSaving(true);
         try {
-            await fetch(`/api/checklists/${id}`, {
+            await fetch(`/api/checklists/${checklistId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reorder_stages: stageIds }),
@@ -84,7 +82,7 @@ export default function ChecklistDetail() {
         setCheckpoints(newCheckpoints);
         setSaving(true);
         try {
-            await fetch(`/api/checklists/${id}`, {
+            await fetch(`/api/checklists/${checklistId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reorder_checkpoints: reorderData }),
@@ -151,17 +149,11 @@ export default function ChecklistDetail() {
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
-                    <button className="flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                        <Upload size={16} /> Import
-                    </button>
-                    <button className="flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                        <Download size={16} /> Export
-                    </button>
                     <button
-                        onClick={() => setIsEditModalOpen(true)}
+                        onClick={() => setIsLiveModalOpen(true)}
                         className="flex items-center gap-1.5 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-sm font-medium transition-colors"
                     >
-                        <Edit3 size={16} /> Edit
+                        <Rocket size={16} /> Go Live
                     </button>
                 </div>
             </div>
@@ -318,28 +310,198 @@ export default function ChecklistDetail() {
                 </div>
             )}
 
-            <EditChecklistModal
-                isOpen={isEditModalOpen}
-                onClose={() => setIsEditModalOpen(false)}
-                onSaved={loadData}
-                checklistId={id}
-                checklist={checklist}
-            />
-
             <StageFormModal
                 isOpen={isStageModalOpen}
                 onClose={() => setIsStageModalOpen(false)}
                 onSaved={loadData}
-                checklistId={id}
+                checklistId={checklistId}
             />
 
             <CheckpointFormModal
                 isOpen={isCheckpointModalOpen}
                 onClose={() => setIsCheckpointModalOpen(false)}
                 onSaved={loadData}
-                checklistId={id}
+                checklistId={checklistId}
                 stageId={activeStageId || ''}
             />
+
+            {isLiveModalOpen && checklist && (
+                <LiveChecklistModal
+                    projectId={projectId}
+                    checklist={checklist}
+                    onClose={() => setIsLiveModalOpen(false)}
+                    onSuccess={() => setIsLiveModalOpen(false)}
+                />
+            )}
+        </div>
+    );
+}
+
+function LiveChecklistModal({
+    projectId, checklist, onClose, onSuccess,
+}: { projectId: string; checklist: Checklist; onClose: () => void; onSuccess: () => void; }) {
+    const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+    const [projectTeams, setProjectTeams] = useState<ProjectTeam[]>([]);
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+    const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+    const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        const load = async () => {
+            setLoading(true);
+            const [mRes, tRes] = await Promise.all([
+                fetch(`/api/projects/${projectId}/members`),
+                fetch(`/api/projects/${projectId}/teams`),
+            ]);
+            const m = await mRes.json();
+            const t = await tRes.json();
+            setProjectMembers(Array.isArray(m) ? m : []);
+            setProjectTeams(Array.isArray(t) ? t : []);
+            setLoading(false);
+        };
+        load();
+    }, [projectId]);
+
+    const selectedTeamNames = projectTeams
+        .filter(t => selectedTeamIds.includes(t.team_id))
+        .map(t => t.team_name);
+
+    const availableMembers = projectMembers.filter(m =>
+        (m.user_teams || '').split(',').map(t => t.trim()).some(t => selectedTeamNames.includes(t))
+    );
+
+    const toggleUser = (id: string) => {
+        setSelectedUserIds(prev => prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]);
+    };
+
+    const toggleTeam = (id: string) => {
+        setSelectedTeamIds(prev => {
+            const next = prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id];
+            const nextTeamNames = projectTeams.filter(t => next.includes(t.team_id)).map(t => t.team_name);
+            const stillAvailable = new Set(
+                projectMembers
+                    .filter(m => (m.user_teams || '').split(',').map(t => t.trim()).some(t => nextTeamNames.includes(t)))
+                    .map(m => m.user_id)
+            );
+            setSelectedUserIds(u => u.filter(uid => stillAvailable.has(uid)));
+            return next;
+        });
+    };
+
+    const submit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (selectedUserIds.length === 0) { setError('Select at least one user.'); return; }
+        if (selectedTeamIds.length === 0) { setError('Select at least one team.'); return; }
+        setSaving(true);
+        setError('');
+        try {
+            const res = await fetch(`/api/projects/${projectId}/eqcs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    checklist_id: checklist.id,
+                    assigned_user_ids: selectedUserIds,
+                    assigned_team_ids: selectedTeamIds,
+                }),
+            });
+            if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to go live'); }
+            onSuccess();
+        } catch (e) { setError((e as Error).message); }
+        finally { setSaving(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+            <div className="relative bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-scale-in">
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Live Checklist</h2>
+                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"><X size={16} /></button>
+                </div>
+
+                <form onSubmit={submit} className="space-y-5">
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">* Name</label>
+                        <input className="input w-full" value={checklist.name} disabled readOnly />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">* UOM</label>
+                        <select className="input w-full" disabled defaultValue="">
+                            <option value="">—</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Reference Number</label>
+                        <input className="input w-full" value={checklist.reference_number ?? ''} disabled readOnly />
+                    </div>
+
+                    <div className="relative">
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">* Team</label>
+                        <div
+                            className={`input flex items-center justify-between cursor-pointer ${selectedTeamIds.length === 0 ? 'border-orange-500' : ''}`}
+                            onClick={() => setIsTeamDropdownOpen(!isTeamDropdownOpen)}
+                        >
+                            <span className="text-gray-400">{selectedTeamIds.length > 0 ? `${selectedTeamIds.length} Teams Selected` : 'Select teams'}</span>
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                        </div>
+                        {isTeamDropdownOpen && (
+                            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-xl max-h-48 overflow-y-auto p-2">
+                                {loading && <p className="text-xs text-gray-400 p-2">Loading…</p>}
+                                {!loading && projectTeams.length === 0 && <p className="text-xs text-gray-400 p-2">No teams linked to this project yet.</p>}
+                                {projectTeams.map(t => (
+                                    <div key={t.team_id} className="flex items-center gap-2 p-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer" onClick={() => toggleTeam(t.team_id)}>
+                                        <input type="checkbox" checked={selectedTeamIds.includes(t.team_id)} readOnly className="rounded text-teal-600" />
+                                        <span className="text-xs text-gray-600 dark:text-gray-400">{t.team_name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="relative">
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">* User</label>
+                        <div
+                            className={`input flex items-center justify-between ${selectedTeamIds.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${selectedUserIds.length === 0 ? 'border-orange-500' : ''}`}
+                            onClick={() => { if (selectedTeamIds.length > 0) setIsUserDropdownOpen(!isUserDropdownOpen); }}
+                        >
+                            <span className="text-gray-400">
+                                {selectedTeamIds.length === 0
+                                    ? 'Select a team first'
+                                    : selectedUserIds.length > 0 ? `${selectedUserIds.length} Users Selected` : 'Select users'}
+                            </span>
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                        </div>
+                        {isUserDropdownOpen && selectedTeamIds.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-xl max-h-48 overflow-y-auto p-2">
+                                {loading && <p className="text-xs text-gray-400 p-2">Loading…</p>}
+                                {!loading && availableMembers.length === 0 && <p className="text-xs text-gray-400 p-2">No members of the selected team(s) are assigned to this project.</p>}
+                                {availableMembers.map(m => (
+                                    <div key={m.user_id} className="flex items-center gap-2 p-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer" onClick={() => toggleUser(m.user_id)}>
+                                        <input type="checkbox" checked={selectedUserIds.includes(m.user_id)} readOnly className="rounded text-teal-600" />
+                                        <span className="text-xs text-gray-600 dark:text-gray-400">{m.user_name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {error && <p className="text-xs text-red-500">{error}</p>}
+
+                    <div className="flex gap-3 pt-2">
+                        <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
+                        <button type="submit" className="btn-primary flex-1 justify-center bg-orange-500 hover:bg-orange-600" disabled={saving}>
+                            {saving ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
+                            {saving ? 'Going live…' : 'Go Live'}
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 }

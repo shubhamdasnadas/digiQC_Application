@@ -16,7 +16,8 @@ export default function Checklists() {
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showTable, setShowTable] = useState(true);
-  const [form, setForm] = useState({ project_id: '', name: '' });
+  const [form, setForm] = useState({ project_id: '', name: '', uom: '', reference_number: '', template_id: '' });
+  const [isTemplate, setIsTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -123,8 +124,8 @@ export default function Checklists() {
                       <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.uom ?? '—'}</td>
                       <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.reference_number ?? '—'}</td>
                       <td className="px-5 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${c.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
-                          {c.status === 'active' ? 'Active' : 'Inactive'}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${c.status === 'live' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
+                          {c.status === 'live' ? 'Live' : 'Draft'}
                         </span>
                       </td>
                       <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.updated_by ?? '—'}</td>
@@ -161,36 +162,102 @@ export default function Checklists() {
         </div>
       )}
 
-      {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 glass" onClick={() => setShowAdd(false)} />
-          <div className="relative card w-full max-w-md p-6 animate-scale-in">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Checklist</h2>
-              <button onClick={() => setShowAdd(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
-            </div>
-            <form onSubmit={handleAdd} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Project</label>
-                <select className="input" value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Checklist Name *</label>
-                <input required className="input" placeholder="Structural QC Checklist" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => setShowAdd(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
-                <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  {saving ? 'Saving...' : 'Add'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+       {showAdd && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-black/60 glass" onClick={() => setShowAdd(false)} />
+           <div className="relative bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl animate-scale-in overflow-hidden">
+             <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-800">
+               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Checklist</h2>
+               <button onClick={() => setShowAdd(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
+             </div>
+             <form onSubmit={handleAdd} className="p-6 space-y-6">
+               {/* <div className="flex items-center justify-between">
+                 <span className="text-sm text-gray-600 dark:text-gray-400">digiQC Template</span>
+                 <button 
+                   type="button"
+                   onClick={() => setIsTemplate(!isTemplate)}
+                   className={`w-11 h-6 rounded-full transition-colors relative ${isTemplate ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                 >
+                   <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isTemplate ? 'left-6' : 'left-1'}`} />
+                 </button>
+               </div> */}
+
+               <div className="space-y-4">
+                 {!isTemplate ? (
+                   <>
+                     <div>
+                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                         <span className="text-red-500 mr-1">*</span> Name
+                       </label>
+                       <input 
+                         required 
+                         className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all" 
+                         placeholder="Enter Name" 
+                         value={form.name} 
+                         onChange={e => setForm(f => ({ ...f, name: e.target.value }))} 
+                       />
+                     </div>
+
+                     <div>
+                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                         <span className="text-red-500 mr-1">*</span> UOM
+                       </label>
+                       <div className="relative">
+                         <select 
+                           required
+                           className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none transition-all" 
+                           value={form.uom} 
+                           onChange={e => setForm(f => ({ ...f, uom: e.target.value }))}
+                         >
+                           <option value="">Select UOM</option>
+                           <option value="m">Meters (m)</option>
+                           <option value="mm">Millimeters (mm)</option>
+                           <option value="kg">Kilograms (kg)</option>
+                           <option value="nos">Numbers (nos)</option>
+                           <option value="sqm">Square Meters (sqm)</option>
+                         </select>
+                         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                           <ChevronDown size={16} />
+                         </div>
+                       </div>
+                     </div>
+
+                     <div>
+                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reference Number</label>
+                       <input 
+                         className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all" 
+                         placeholder="Reference Number" 
+                         value={form.reference_number} 
+                         onChange={e => setForm(f => ({ ...f, reference_number: e.target.value }))} 
+                       />
+                     </div>
+                   </>
+                 ) : (
+                  ""
+                 )}
+               </div>
+
+               <div className="flex justify-end gap-3 pt-4">
+                 <button 
+                   type="button" 
+                   onClick={() => setShowAdd(false)} 
+                   className="px-6 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   type="submit" 
+                   className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2" 
+                   disabled={saving}
+                 >
+                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                   {saving ? 'Saving...' : 'Add'}
+                 </button>
+               </div>
+             </form>
+           </div>
+         </div>
+       )}
 
       <ImportModal
         isOpen={showImport}

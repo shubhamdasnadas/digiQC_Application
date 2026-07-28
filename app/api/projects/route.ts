@@ -25,8 +25,8 @@ export async function GET(request: NextRequest) {
         payload.orgId!,
         `SELECT p.*,
                 (SELECT COUNT(*)::int FROM project_members pm WHERE pm.project_id = p.id) AS member_count,
-                (SELECT name FROM project_members pm
-                  JOIN public.users u ON u.id = pm.user_id
+                (SELECT m.name FROM project_members pm
+                  JOIN members m ON m.id = pm.user_id
                   WHERE pm.project_id = p.id ORDER BY pm.added_at LIMIT 1) AS first_member_name
          FROM projects p
          WHERE p.id = $1
@@ -55,7 +55,10 @@ export async function GET(request: NextRequest) {
     const { rows } = await orgQuery(
       payload.orgId!,
       `SELECT p.*,
-              (SELECT COUNT(*)::int FROM project_members pm WHERE pm.project_id = p.id) AS member_count
+              (SELECT COUNT(*)::int FROM project_members pm WHERE pm.project_id = p.id) AS member_count,
+              (SELECT m.name FROM project_members pm
+                JOIN members m ON m.id = pm.user_id
+                WHERE pm.project_id = p.id ORDER BY pm.added_at LIMIT 1) AS first_member_name
        FROM projects p
        ${where}
        ORDER BY p.created_at DESC`,

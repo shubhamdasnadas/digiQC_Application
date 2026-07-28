@@ -26,12 +26,16 @@ export function downloadSampleExcel(dataType: 'projects' | 'teams' | 'organizati
         type: 'inspection',
         team_lead_name: 'Rajesh Kumar',
         spoc_name: 'Priya Singh',
+        active_projects: 'Block-A Foundation, MEP Installation Ph1',
+        inactive_projects: '',
       },
       {
         name: 'Audit Team',
         type: 'audit',
         team_lead_name: 'David Williams',
         spoc_name: 'Emma Watson',
+        active_projects: '',
+        inactive_projects: 'Facade Cladding QC',
       },
     ],
     organizations: [

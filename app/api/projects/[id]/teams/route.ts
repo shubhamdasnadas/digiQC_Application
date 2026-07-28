@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
+import { touchProject } from '@/lib/projects';
 
 interface RouteContext { params: Promise<{ id: string }>; }
 
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
     const { rows } = await orgQuery(
       payload.orgId!,
       `SELECT pt.id, pt.project_id, pt.team_id, pt.added_at,
+              pt.assigned_checklist, pt.assigned_user,
               t.name AS team_name, t.type AS team_type,
               t.team_lead_name, t.spoc_name
        FROM project_teams pt
@@ -47,6 +49,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
         [id, r.team_id]
       );
     }
+    await touchProject(payload.orgId!, id, payload.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
@@ -66,6 +69,7 @@ export async function DELETE(request: NextRequest, ctx: RouteContext) {
       `DELETE FROM project_teams WHERE project_id = $1 AND team_id = $2`,
       [id, teamId]
     );
+    await touchProject(payload.orgId!, id, payload.userId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
