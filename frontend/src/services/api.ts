@@ -2,14 +2,17 @@ import { Project, Team, Checklist, EQC, Issue, RegisterEntry, ProjectTarget, Pro
 
 class ApiService {
   private getHeaders() {
-    const userId = localStorage.getItem('digiqc_user_id') || 'usr-sarvesh';
-    const orgId = localStorage.getItem('digiqc_org_id') || 'org-city-hospital';
+    const userId = localStorage.getItem('digiqc_user_id') || '';
+    const orgId = localStorage.getItem('digiqc_org_id') || '';
 
-    return {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'x-user-id': userId,
-      'x-org-id': orgId,
     };
+    // Only send the headers when we have a real value — the backend
+    // falls back to the first user in the database when these are missing.
+    if (userId) headers['x-user-id'] = userId;
+    if (orgId) headers['x-org-id'] = orgId;
+    return headers;
   }
 
   // Auth

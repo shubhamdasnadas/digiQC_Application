@@ -35,20 +35,31 @@ async function loadOrgsForUser(userId: string): Promise<AuthOrg[]> {
   return rows;
 }
 
+// Helper: strict UUID check so we never pass a non-UUID string to a uuid column.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
+
 // Helper to extract session or header user info
 export const getUserFromHeader = async (req: Request): Promise<AuthData> => {
-  const userId = req.headers['x-user-id'] as string;
-  const orgId = req.headers['x-org-id'] as string;
+  const rawUserId = req.headers['x-user-id'] as string | undefined;
+  const rawOrgId = req.headers['x-org-id'] as string | undefined;
+  const userId = isUuid(rawUserId) ? rawUserId : undefined;
+  const orgId = isUuid(rawOrgId) ? rawOrgId : undefined;
 
   let user: AuthUser | undefined;
   if (userId) {
-    const { rows } = await pool.query('SELECT id, name, email, avatar_url FROM public.users WHERE id = $1', [userId]);
+    const { rows } = await pool.query(
+      'SELECT id, name, email, avatar_url FROM public.users WHERE id = $1',
+      [userId]
+    );
     user = rows[0];
   }
 
   if (!user) {
     // Fallback to the first user for quick testing
-    const { rows } = await pool.query('SELECT id, name, email, avatar_url FROM public.users ORDER BY created_at LIMIT 1');
+    const { rows } = await pool.query(
+      'SELECT id, name, email, avatar_url FROM public.users ORDER BY created_at LIMIT 1'
+    );
     user = rows[0];
   }
 
