@@ -366,6 +366,33 @@ BEGIN
       example text DEFAULT '''',
       created_at timestamptz DEFAULT now()
     )', schema_name, schema_name);
+
+  -- ─── Nomenclature (tasks & sub-tasks) ─────────────────────
+  -- Self-referencing: rows with parent_id NULL are tasks, rows with
+  -- parent_id set are sub-tasks of that task. Deleting a task cascades
+  -- to its sub-tasks.
+  EXECUTE format('
+    CREATE TABLE IF NOT EXISTS %I.nomenclature (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id uuid NOT NULL REFERENCES %I.projects(id) ON DELETE CASCADE,
+      parent_id uuid REFERENCES %I.nomenclature(id) ON DELETE CASCADE,
+      sr_no integer NOT NULL DEFAULT 1,
+      name text NOT NULL,
+      description text DEFAULT '''',
+      status text NOT NULL DEFAULT ''active''
+        CHECK (status IN (''active'',''inactive'')),
+      created_at timestamptz DEFAULT now()
+    )', schema_name, schema_name, schema_name);
+
+  EXECUTE format('
+    CREATE INDEX IF NOT EXISTS nomenclature_project_idx
+    ON %I.nomenclature (project_id)
+  ', schema_name);
+
+  EXECUTE format('
+    CREATE INDEX IF NOT EXISTS nomenclature_parent_idx
+    ON %I.nomenclature (parent_id)
+  ', schema_name);
 END;
 $$;
 

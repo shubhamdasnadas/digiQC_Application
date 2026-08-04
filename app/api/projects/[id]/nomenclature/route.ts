@@ -5,6 +5,14 @@ import { touchProject } from '@/lib/projects';
 
 interface RouteContext { params: Promise<{ id: string }>; }
 
+const STATUSES = ['active', 'inactive'] as const;
+
+/**
+ * GET /api/projects/[id]/nomenclature
+ * Returns a flat list of nomenclature rows for the project, ordered for
+ * display. Rows with parent_id NULL are tasks; the rest are sub-tasks.
+ * The client groups them into a tree.
+ */
 export async function GET(request: NextRequest, ctx: RouteContext) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
@@ -12,7 +20,10 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
   try {
     const { rows } = await orgQuery(
       payload.orgId!,
-      `SELECT * FROM project_nomenclature WHERE project_id = $1 ORDER BY created_at`,
+      `SELECT id, project_id, parent_id, sr_no, name, description, status, created_at
+       FROM nomenclature
+       WHERE project_id = $1
+       ORDER BY sr_no, created_at`,
       [id]
     );
     return NextResponse.json(rows);
@@ -21,6 +32,13 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
   }
 }
 
+/**
+ * POST /api/projects/[id]/nomenclature
+ * Body: single row or { rows: [...] } with:
+ *   { name, description?, sr_no?, status?, parent_id? }
+ * parent_id omitted/null => top-level task; set => sub-task of that task.
+ * sr_no 0/omitted => auto-assigned as next number among its siblings.
+ */
 export async function POST(request: NextRequest, ctx: RouteContext) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
@@ -28,14 +46,106 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
   try {
     const body = await request.json();
     const rows = body.rows ?? [body];
+
     for (const r of rows) {
+      const name = String(r.name ?? '').trim();
+      if (!name) continue;
+
+      const parentId = r.parent_id ?? null;
+      if (parentId) {
+        const { rows: parent } = await orgQuery(
+          payload.orgId!,
+          `SELECT id FROM nomenclature WHERE id = $1 AND project_id = $2 AND parent_id IS NULL`,
+          [parentId, id]
+        );
+        if (!parent[0]) {
+          return NextResponse.json({ error: 'Parent task not found' }, { status: 400 });
+        }
+      }
+
+      const status = STATUSES.includes(r.status) ? r.status : 'active';
+
       await orgQuery(
         payload.orgId!,
-        `INSERT INTO project_nomenclature (project_id, prefix, description, example)
-         VALUES ($1,$2,$3,$4)`,
-        [id, r.prefix, r.description ?? '', r.example ?? '']
+        `INSERT INTO nomenclature (project_id, parent_id, sr_no, name, description, status)
+         VALUES (
+           $1, $2,
+           COALESCE(NULLIF($3, 0),
+             (SELECT COALESCE(MAX(sr_no), 0) + 1 FROM nomenclature
+              WHERE project_id = $1 AND parent_id IS NOT DISTINCT FROM $2)),
+           $4, $5, $6
+         )`,
+        [id, parentId, r.sr_no ?? 0, name, r.description ?? '', status]
       );
     }
+
+    await touchProject(payload.orgId!, id, payload.userId);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/projects/[id]/nomenclature
+ * Body: { id, name?, description?, sr_no?, status? } — updates one row.
+ */
+export async function PATCH(request: NextRequest, ctx: RouteContext) {
+  const { payload, response } = requireAuth(request);
+  if (!payload) return response;
+  const { id } = await ctx.params;
+  try {
+    const body = await request.json();
+    if (!body.id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    if (body.status && !STATUSES.includes(body.status)) {
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+    }
+
+    const { rows } = await orgQuery(
+      payload.orgId!,
+      `UPDATE nomenclature
+       SET name        = COALESCE($1, name),
+           description = COALESCE($2, description),
+           sr_no       = COALESCE(NULLIF($3, 0), sr_no),
+           status      = COALESCE($4, status)
+       WHERE id = $5 AND project_id = $6
+       RETURNING id`,
+      [
+        body.name != null ? String(body.name).trim() : null,
+        body.description ?? null,
+        body.sr_no ?? 0,
+        body.status ?? null,
+        body.id,
+        id,
+      ]
+    );
+    if (!rows[0]) return NextResponse.json({ error: 'Entry not found' }, { status: 404 });
+
+    await touchProject(payload.orgId!, id, payload.userId);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/projects/[id]/nomenclature?entry_id=...
+ * Deleting a task also deletes its sub-tasks (ON DELETE CASCADE).
+ */
+export async function DELETE(request: NextRequest, ctx: RouteContext) {
+  const { payload, response } = requireAuth(request);
+  if (!payload) return response;
+  const { id } = await ctx.params;
+  try {
+    const { searchParams } = new URL(request.url);
+    const entryId = searchParams.get('entry_id');
+    if (!entryId) return NextResponse.json({ error: 'Missing entry_id' }, { status: 400 });
+
+    await orgQuery(
+      payload.orgId!,
+      `DELETE FROM nomenclature WHERE id = $1 AND project_id = $2`,
+      [entryId, id]
+    );
     await touchProject(payload.orgId!, id, payload.userId);
     return NextResponse.json({ success: true });
   } catch (error) {

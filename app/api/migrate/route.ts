@@ -19,6 +19,17 @@ export async function GET(request: NextRequest) {
             await orgQuery(payload.orgId!, statement);
         }
 
+        // Fix for teams table columns if they are missing
+        try {
+            await orgQuery(payload.orgId!, `
+                ALTER TABLE teams 
+                ADD COLUMN IF NOT EXISTS active_projects text DEFAULT '',
+                ADD COLUMN IF NOT EXISTS inactive_projects text DEFAULT '';
+            `);
+        } catch (e) {
+            console.error('Teams migration error:', e);
+        }
+
         return NextResponse.json({ success: true, message: 'Migration applied successfully' });
     } catch (error) {
         console.error('Migration error:', error);

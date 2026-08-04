@@ -225,6 +225,22 @@ export interface Nomenclature {
   created_at: string;
 }
 
+/**
+ * A row in the per-org `nomenclature` table.
+ * Rows with parent_id === null are tasks; rows with parent_id set are
+ * sub-tasks of that task (one level deep).
+ */
+export interface NomenclatureTask {
+  id: string;
+  project_id: string;
+  parent_id: string | null;
+  sr_no: number;
+  name: string;
+  description: string;
+  status: 'active' | 'inactive';
+  created_at: string;
+}
+
 export type NavSection =
   | 'dashboard'
   | 'projects'

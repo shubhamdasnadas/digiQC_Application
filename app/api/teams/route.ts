@@ -32,12 +32,12 @@ export async function POST(request: NextRequest) {
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           payload.orgId,
-          row.name,
-          row.type ?? 'developer',
-          row.team_lead_name ?? '',
-          row.spoc_name ?? '',
-          row.active_projects ?? '',
-          row.inactive_projects ?? '',
+          row.name || row['Name'] || '',
+          row.type || row['Type'] || 'developer',
+          row.team_lead_name || row['Team Lead Name'] || '',
+          row.spoc_name || row['SPOC Name'] || '',
+          row.active_projects || row['Active Assigned Projects'] || '',
+          row.inactive_projects || row['Inactive Assigned Projects'] || '',
         ]
       );
     }
