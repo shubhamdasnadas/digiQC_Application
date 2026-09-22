@@ -8,13 +8,16 @@ import {
 import TabsPageShell from '@/components/TabsPageShell';
 import type { NomenclatureTask } from '@/lib/types';
 
+// Tasks are L1. Sub-tasks can nest under any row, up to L6.
+const MAX_LEVEL = 6;
+
 export default function NomenclatureTab() {
   const { id } = useParams<{ id: string }>();
   const [items, setItems] = useState<NomenclatureTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddTask, setShowAddTask] = useState(false);
-  const [subtaskParent, setSubtaskParent] = useState<NomenclatureTask | null>(null);
-  const [editing, setEditing] = useState<NomenclatureTask | null>(null);
+  const [subtaskParent, setSubtaskParent] = useState<{ node: NomenclatureTask; level: number } | null>(null);
+  const [editing, setEditing] = useState<{ node: NomenclatureTask; level: number } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const load = async () => {
@@ -30,7 +33,7 @@ export default function NomenclatureTab() {
 
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id]);
 
-  // Root-level tasks (parent_id NULL), sorted by sr_no
+  // Root-level tasks (parent_id NULL, L1), sorted by sr_no
   const tasks = useMemo(
     () =>
       items
@@ -40,7 +43,7 @@ export default function NomenclatureTab() {
     [items]
   );
 
-  // parent_id -> sorted children, works for ANY depth (task -> sub-task -> sub-sub-task ...)
+  // parent_id -> sorted children, works for ANY depth (task -> sub-task -> sub-sub-task ... up to L6)
   const childrenOf = useMemo(() => {
     const map = new Map<string, NomenclatureTask[]>();
     for (const i of items) {
@@ -86,7 +89,7 @@ export default function NomenclatureTab() {
   return (
     <TabsPageShell
       title="Nomenclature"
-      description="Tasks and sub-tasks defining this project's work nomenclature"
+      description="Tasks and sub-tasks defining this project's work nomenclature (up to 6 levels deep)"
       onAdd={() => setShowAddTask(true)}
       addLabel="Add Task"
     >
@@ -115,8 +118,8 @@ export default function NomenclatureTab() {
               childrenOf={childrenOf}
               collapsed={collapsed}
               onToggle={toggle}
-              onAddChild={setSubtaskParent}
-              onEdit={setEditing}
+              onAddChild={(node, level) => setSubtaskParent({ node, level })}
+              onEdit={(node, level) => setEditing({ node, level })}
               onDelete={remove}
             />
           ))}
@@ -126,6 +129,7 @@ export default function NomenclatureTab() {
       {showAddTask && (
         <TaskModal
           projectId={id}
+          level={1}
           onClose={() => setShowAddTask(false)}
           onSaved={() => { setShowAddTask(false); load(); }}
         />
@@ -133,10 +137,11 @@ export default function NomenclatureTab() {
       {subtaskParent && (
         <TaskModal
           projectId={id}
-          parent={subtaskParent}
+          parent={subtaskParent.node}
+          level={subtaskParent.level + 1}
           onClose={() => setSubtaskParent(null)}
           onSaved={() => {
-            const pid = subtaskParent.id;
+            const pid = subtaskParent.node.id;
             setSubtaskParent(null);
             // Reveal the parent's children after adding
             setCollapsed((prev) => { const n = new Set(prev); n.delete(pid); return n; });
@@ -147,7 +152,8 @@ export default function NomenclatureTab() {
       {editing && (
         <TaskModal
           projectId={id}
-          existing={editing}
+          existing={editing.node}
+          level={editing.level}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load(); }}
         />
@@ -158,8 +164,8 @@ export default function NomenclatureTab() {
 
 /* ────────────────────────────────────────────────────────────────
    NomenclatureNode — renders one row + recursively renders its
-   children at level+1. Works to any nesting depth (L1, L2, L3, …),
-   and every row (including sub-tasks) gets Add / Edit / Delete.
+   children at level+1, up to MAX_LEVEL (L6). "Add sub-task" is
+   hidden once a row is already at L6, since it can't nest further.
    ──────────────────────────────────────────────────────────────── */
 function NomenclatureNode({
   node,
@@ -178,12 +184,13 @@ function NomenclatureNode({
   childrenOf: Map<string, NomenclatureTask[]>;
   collapsed: Set<string>;
   onToggle: (id: string) => void;
-  onAddChild: (parent: NomenclatureTask) => void;
-  onEdit: (item: NomenclatureTask) => void;
+  onAddChild: (parent: NomenclatureTask, level: number) => void;
+  onEdit: (item: NomenclatureTask, level: number) => void;
   onDelete: (item: NomenclatureTask) => void;
 }) {
   const subs = childrenOf.get(node.id) ?? [];
   const isCollapsed = collapsed.has(node.id);
+  const canAddChild = level < MAX_LEVEL;
 
   return (
     <>
@@ -195,8 +202,8 @@ function NomenclatureNode({
         hasChildren={subs.length > 0}
         expanded={!isCollapsed}
         onToggle={subs.length > 0 ? () => onToggle(node.id) : undefined}
-        onAddChild={() => onAddChild(node)}
-        onEdit={() => onEdit(node)}
+        onAddChild={canAddChild ? () => onAddChild(node, level) : undefined}
+        onEdit={() => onEdit(node, level)}
         onDelete={() => onDelete(node)}
       />
 
@@ -222,7 +229,7 @@ function NomenclatureNode({
 /* ────────────────────────────────────────────────────────────────
    TreeRow — one line of the nomenclature tree at any depth.
    Level 0 = project root (static, no actions)
-   Level 1+ = task / sub-task / sub-sub-task ... (add child, edit, delete)
+   Level 1-6 = task / sub-task / ... (add child up to L6, edit, delete)
    ──────────────────────────────────────────────────────────────── */
 function TreeRow({
   level,
@@ -250,7 +257,10 @@ function TreeRow({
   const levelLabel = `L${level}`;
   const indent = level * 24; // px per level
 
-  const levelColors = ['text-emerald-500', 'text-teal-500', 'text-sky-500', 'text-violet-500', 'text-amber-500'];
+  const levelColors = [
+    'text-emerald-500', 'text-teal-500', 'text-sky-500',
+    'text-violet-500', 'text-amber-500', 'text-rose-500', 'text-fuchsia-500',
+  ];
   const levelColor = levelColors[Math.min(level, levelColors.length - 1)];
 
   return (
@@ -302,7 +312,7 @@ function TreeRow({
         )}
       </div>
 
-      {/* actions: every real row (level >= 1) gets Add sub-item, Edit, Delete */}
+      {/* actions: every real row (level >= 1) gets Edit, Delete; Add sub-item only below MAX_LEVEL */}
       <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         {onAddChild && (
           <button
@@ -340,12 +350,14 @@ function TaskModal({
   projectId,
   parent,
   existing,
+  level,
   onClose,
   onSaved,
 }: {
   projectId: string;
   parent?: NomenclatureTask | null;
   existing?: NomenclatureTask | null;
+  level: number;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -360,9 +372,9 @@ function TaskModal({
   const [error, setError] = useState('');
 
   const title = isEdit
-    ? `Edit ${existing?.parent_id ? 'Sub-task' : 'Task'}`
+    ? `Edit ${existing?.parent_id ? `Sub-task (L${level})` : 'Task'}`
     : parent
-      ? 'Add Sub-task'
+      ? `Add Sub-task (L${level})`
       : 'Add Task';
 
   const submit = async (e: React.FormEvent) => {
@@ -400,7 +412,7 @@ function TaskModal({
             <h2 className="text-lg font-semibold">{title}</h2>
             {parent && !isEdit && (
               <p className="text-xs text-gray-500 mt-0.5">
-                Under task: <span className="font-medium text-teal-600 dark:text-teal-400">{parent.name}</span>
+                Under: <span className="font-medium text-teal-600 dark:text-teal-400">{parent.name}</span>
               </p>
             )}
           </div>

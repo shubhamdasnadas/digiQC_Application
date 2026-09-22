@@ -7,10 +7,14 @@ interface RouteContext { params: Promise<{ id: string }>; }
 
 const STATUSES = ['active', 'inactive'] as const;
 
+// Tasks are L1. Sub-tasks nest under any existing row, up to L6.
+const MAX_LEVEL = 6;
+
 /**
  * GET /api/projects/[id]/nomenclature
  * Returns a flat list of nomenclature rows for the project, ordered for
- * display. Rows with parent_id NULL are tasks; the rest are sub-tasks.
+ * display. Rows with parent_id NULL are tasks (L1); the rest are
+ * sub-tasks at whatever depth their parent chain puts them at.
  * The client groups them into a tree.
  */
 export async function GET(request: NextRequest, ctx: RouteContext) {
@@ -36,7 +40,10 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
  * POST /api/projects/[id]/nomenclature
  * Body: single row or { rows: [...] } with:
  *   { name, description?, sr_no?, status?, parent_id? }
- * parent_id omitted/null => top-level task; set => sub-task of that task.
+ * parent_id omitted/null => top-level task (L1).
+ * parent_id set => sub-task of that row, nested at parent's level + 1,
+ * up to MAX_LEVEL (L6). Any existing row in the project can be a parent,
+ * not just top-level tasks.
  * sr_no 0/omitted => auto-assigned as next number among its siblings.
  */
 export async function POST(request: NextRequest, ctx: RouteContext) {
@@ -52,14 +59,34 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       if (!name) continue;
 
       const parentId = r.parent_id ?? null;
+
       if (parentId) {
-        const { rows: parent } = await orgQuery(
+        // Confirm the parent exists in this project, and compute its
+        // depth (via its ancestor chain) so we can enforce MAX_LEVEL.
+        const { rows: depthRows } = await orgQuery(
           payload.orgId!,
-          `SELECT id FROM nomenclature WHERE id = $1 AND project_id = $2 AND parent_id IS NULL`,
+          `WITH RECURSIVE ancestors AS (
+             SELECT id, parent_id, 1 AS level
+             FROM nomenclature
+             WHERE id = $1 AND project_id = $2
+             UNION ALL
+             SELECT n.id, n.parent_id, a.level + 1
+             FROM nomenclature n
+             JOIN ancestors a ON n.id = a.parent_id
+           )
+           SELECT MAX(level) AS level FROM ancestors`,
           [parentId, id]
         );
-        if (!parent[0]) {
+
+        const parentLevel = depthRows[0]?.level;
+        if (!parentLevel) {
           return NextResponse.json({ error: 'Parent task not found' }, { status: 400 });
+        }
+        if (parentLevel >= MAX_LEVEL) {
+          return NextResponse.json(
+            { error: `Sub-tasks can nest at most ${MAX_LEVEL} levels deep` },
+            { status: 400 }
+          );
         }
       }
 
@@ -130,7 +157,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
 
 /**
  * DELETE /api/projects/[id]/nomenclature?entry_id=...
- * Deleting a task also deletes its sub-tasks (ON DELETE CASCADE).
+ * Deleting a task also deletes its sub-tasks (ON DELETE CASCADE), at any depth.
  */
 export async function DELETE(request: NextRequest, ctx: RouteContext) {
   const { payload, response } = requireAuth(request);
