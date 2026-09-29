@@ -7,7 +7,7 @@ import Header from '@/components/Header';
 import AppShell from '../components/AppShell';
 
 export const metadata: Metadata = {
-  title: 'DigiQC | Quality Control Platform',
+  title: 'Valid8 | Quality Control Platform',
   description: 'Multi-tenant quality control platform',
 };
 

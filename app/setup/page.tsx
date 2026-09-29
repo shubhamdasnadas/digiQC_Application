@@ -50,7 +50,7 @@ export default function Setup() {
             <Settings size={20} />
           </div>
           <div>
-            <h2 className="font-semibold text-white text-lg">DigiQC Setup & Configuration</h2>
+            <h2 className="font-semibold text-white text-lg">Valid8 Setup & Configuration</h2>
             <p className="text-teal-100 text-xs">Next.js + PostgreSQL — Phase 1</p>
           </div>
         </div>

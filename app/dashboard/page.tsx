@@ -88,7 +88,7 @@ export default function Dashboard() {
         </div>
         <div className="relative">
           <p className="text-teal-100 text-sm font-medium mb-1">Welcome back</p>
-          <h2 className="text-2xl font-bold mb-1">DigiQC Dashboard</h2>
+          <h2 className="text-2xl font-bold mb-1">Valid8 Dashboard</h2>
           <p className="text-teal-100 text-sm">Quality Control Platform</p>
         </div>
         <div className="absolute bottom-4 right-6 flex items-center gap-2 text-teal-100 text-xs">

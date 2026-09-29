@@ -20,7 +20,7 @@ export default function Header() {
   const { user, currentOrg, orgs, switchOrg, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const title = pathTitles[pathname] ?? 'DigiQC';
+  const title = pathTitles[pathname] ?? 'Valid8';
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showOrgSwitcher, setShowOrgSwitcher] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -54,7 +54,7 @@ export default function Header() {
     <header className="h-16 flex items-center justify-between px-6 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex-shrink-0 transition-colors duration-300">
       <div>
         <h1 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h1>
-        <p className="text-xs text-gray-400 dark:text-gray-500">DigiQC — Quality Control Platform</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">Valid8 — Quality Control Platform</p>
       </div>
 
       <div className="flex items-center gap-2">

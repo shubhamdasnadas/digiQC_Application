@@ -46,7 +46,7 @@ export default function Sidebar() {
         </div>
         {!collapsed && (
           <div className="animate-fade-in">
-            <span className="text-base font-bold text-white tracking-tight">Digi<span className="text-teal-400">QC</span></span>
+            <span className="text-base font-bold text-white tracking-tight">Valid<span className="text-teal-400">8</span></span>
             <p className="text-[10px] text-gray-500 -mt-0.5 font-medium tracking-widest uppercase">Quality Control</p>
           </div>
         )}

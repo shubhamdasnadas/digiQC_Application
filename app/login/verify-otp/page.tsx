@@ -120,7 +120,7 @@ function VerifyOtpForm() {
                         <CheckSquare size={28} className="text-white" />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                        Digi<span className="text-teal-500">QC</span>
+                        Valid<span className="text-teal-500">8</span>
                     </h1>
                 </div>
 

@@ -231,7 +231,7 @@ export default function Teams() {
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={() => downloadSampleExcel('teams')} className="btn-secondary"><FileDown size={15} /> Template</button>
               <button onClick={() => setShowImport(true)} className="btn-secondary"><Upload size={15} /> Import</button>
-              <button onClick={() => exportRows().length && exportToXlsx(exportRows(), 'digiqc-teams')} className="btn-secondary"><Download size={15} /> Export XLSX</button>
+              <button onClick={() => exportRows().length && exportToXlsx(exportRows(), 'valid8-teams')} className="btn-secondary"><Download size={15} /> Export XLSX</button>
               <button onClick={() => setShowAdd(true)} className="btn-primary"><Plus size={15} /> Add Team</button>
             </div>
           </div>

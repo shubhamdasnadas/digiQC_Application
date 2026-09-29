@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, X, Loader2, Search, Filter } from 'lucide-react';
+import { Search } from 'lucide-react';
 import TabsPageShell from '@/components/TabsPageShell';
 import DataTable, { type Column } from '@/components/DataTable';
 import type { EQC } from '@/lib/types';
@@ -36,7 +36,6 @@ export default function EQCTab() {
   const [statusFilter, setStatusFilter] = useState<typeof STATUS_FILTERS[number]>('all');
   const [rfiFilter, setRfiFilter] = useState<'all' | 'rfi' | 'overdue'>('all');
   const [search, setSearch] = useState('');
-  const [showAdd, setShowAdd] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -119,10 +118,8 @@ export default function EQCTab() {
 
   return (
     <TabsPageShell
-      title="EQC"
+      title="Inspections"
       description="Engineering Quality Checks for this project"
-      onAdd={() => setShowAdd(true)}
-      addLabel="Add EQC"
       filters={
         <div className="card p-3 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
@@ -190,14 +187,6 @@ export default function EQCTab() {
           emptyMessage="No EQCs found for the selected filters"
         />
       )}
-
-      {showAdd && (
-        <AddEQCModal
-          projectId={id}
-          onClose={() => setShowAdd(false)}
-          onSaved={() => { setShowAdd(false); load(); }}
-        />
-      )}
     </TabsPageShell>
   );
 }
@@ -213,130 +202,6 @@ function SummaryTile({ label, value, color }: { label: string; value: number; co
     <div className={`card p-4 bg-gradient-to-br ${palette[color]}`}>
       <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
       <p className="text-2xl font-bold mt-1">{value}</p>
-    </div>
-  );
-}
-
-function AddEQCModal({
-  projectId,
-  onClose,
-  onSaved,
-}: {
-  projectId: string;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [form, setForm] = useState({
-    location: '',
-    checklist_id: '',
-    stage_index: 1,
-    total_stages: 1,
-    stage_result: 'pending' as 'pass' | 'fail' | 'pending',
-    status: 'pending' as 'passed' | 'failed' | 'pending' | 'rfi',
-    notes: '',
-  });
-  const [checklists, setChecklists] = useState<{ id: string; name: string }[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    fetch(`/api/checklists`)
-      .then((r) => r.json())
-      .then((d) => setChecklists(Array.isArray(d) ? d : []))
-      .catch(() => setChecklists([]));
-  }, []);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.location.trim()) { setError('Location is required.'); return; }
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/eqcs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          checklist_id: form.checklist_id || null,
-          inspected_at: new Date().toISOString(),
-        }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || 'Failed to save');
-      }
-      onSaved();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 glass" onClick={onClose} />
-      <div className="relative card w-full max-w-md p-6 animate-scale-in">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold">Add EQC</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-            <X size={16} />
-          </button>
-        </div>
-        <form onSubmit={submit} className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Location *</label>
-            <input className="input" placeholder="NM/A wing" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Checklist</label>
-            <select className="input" value={form.checklist_id} onChange={(e) => setForm((f) => ({ ...f, checklist_id: e.target.value }))}>
-              <option value="">Select checklist</option>
-              {checklists.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Stage</label>
-              <input type="number" min={1} className="input" value={form.stage_index} onChange={(e) => setForm((f) => ({ ...f, stage_index: parseInt(e.target.value) || 1 }))} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Total Stages</label>
-              <input type="number" min={1} className="input" value={form.total_stages} onChange={(e) => setForm((f) => ({ ...f, total_stages: parseInt(e.target.value) || 1 }))} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Stage Result</label>
-              <select className="input" value={form.stage_result} onChange={(e) => setForm((f) => ({ ...f, stage_result: e.target.value as any }))}>
-                <option value="pending">Pending</option>
-                <option value="pass">Pass</option>
-                <option value="fail">Fail</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">EQC Status</label>
-              <select className="input" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as any }))}>
-                <option value="pending">Pending</option>
-                <option value="passed">Passed</option>
-                <option value="failed">Failed</option>
-                <option value="rfi">RFI</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Notes</label>
-            <textarea rows={2} className="input resize-none" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
-          </div>
-          {error && <p className="text-xs text-red-500">{error}</p>}
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-            <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              {saving ? 'Saving…' : 'Add'}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }

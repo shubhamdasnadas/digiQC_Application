@@ -50,7 +50,7 @@ export async function sendOtpEmail(toEmail: string, otp: string, userName?: stri
         <div class="logo-badge">✓</div>
       </div>
       <h1 class="title">Verification Code</h1>
-      <p class="subtitle">Hello ${userName || 'there'}, use the following one-time password (OTP) to sign in to DigiQC.</p>
+      <p class="subtitle">Hello ${userName || 'there'}, use the following one-time password (OTP) to sign in to Valid8.</p>
 
       <div class="otp-card">
         <div class="otp-code">${otp}</div>
@@ -60,7 +60,7 @@ export async function sendOtpEmail(toEmail: string, otp: string, userName?: stri
       <p style="font-size: 13px; color: #9ca3af; line-height: 1.5;">If you did not request this verification code, please ignore this email or contact support if you suspect unauthorized access.</p>
 
       <div class="footer">
-        &copy; ${new Date().getFullYear()} DigiQC — Quality Control Platform. All rights reserved.
+        &copy; ${new Date().getFullYear()} Valid8 — Quality Control Platform. All rights reserved.
       </div>
     </div>
   </body>
@@ -68,10 +68,10 @@ export async function sendOtpEmail(toEmail: string, otp: string, userName?: stri
   `;
 
     return await transporter.sendMail({
-        from: `"DigiQC" <${from}>`,
+        from: `"Valid8" <${from}>`,
         to: toEmail,
-        subject: `Your DigiQC Verification Code: ${otp}`,
-        text: `Your DigiQC verification code is: ${otp}. It is valid for 10 minutes.`,
+        subject: `Your Valid8 Verification Code: ${otp}`,
+        text: `Your Valid8 verification code is: ${otp}. It is valid for 10 minutes.`,
         html,
     });
 }

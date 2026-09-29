@@ -122,7 +122,7 @@ export default function Members() {
             <Upload size={15} /> Import
           </button>
           <button 
-            onClick={() => exportRows().length && exportToXlsx(exportRows(), 'digiqc-members')} 
+            onClick={() => exportRows().length && exportToXlsx(exportRows(), 'valid8-members')} 
             className="btn-secondary flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
           >
             <Download size={15} /> Export

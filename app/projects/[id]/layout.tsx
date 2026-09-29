@@ -8,7 +8,7 @@ import { ProjectProvider } from '@/context/ProjectContext';
 import type { Project } from '@/lib/types';
 
 const TABS = [
-  { key: 'eqc', label: 'EQC' },
+  { key: 'eqc', label: 'Inspection' },
   { key: 'issue', label: 'Issue' },
   { key: 'register', label: 'Register' },
   { key: 'checklists', label: 'Checklists' },

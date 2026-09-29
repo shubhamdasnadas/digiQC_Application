@@ -172,7 +172,7 @@ export default function Checklists() {
              </div>
              <form onSubmit={handleAdd} className="p-6 space-y-6">
                {/* <div className="flex items-center justify-between">
-                 <span className="text-sm text-gray-600 dark:text-gray-400">digiQC Template</span>
+                 <span className="text-sm text-gray-600 dark:text-gray-400">Valid8 Template</span>
                  <button 
                    type="button"
                    onClick={() => setIsTemplate(!isTemplate)}
