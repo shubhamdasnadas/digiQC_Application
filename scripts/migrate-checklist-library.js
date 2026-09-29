@@ -9,12 +9,36 @@
  * have been run to create the target tables.
  */
 
+const fs = require('fs');
+const path = require('path');
 const { Pool } = require('pg');
+
+// Load .env.local or .env if exists
+const envLocalPath = path.join(__dirname, '..', '.env.local');
+const envPath = path.join(__dirname, '..', '.env');
+const targetEnv = fs.existsSync(envLocalPath) ? envLocalPath : fs.existsSync(envPath) ? envPath : null;
+
+if (targetEnv) {
+  const envContent = fs.readFileSync(targetEnv, 'utf8');
+  envContent.split(/\r?\n/).forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const idx = trimmed.indexOf('=');
+      if (idx > 0) {
+        const key = trimmed.slice(0, idx).trim();
+        const val = trimmed.slice(idx + 1).trim();
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    }
+  });
+}
 
 const pool = new Pool({
   host: process.env.PG_HOST || 'localhost',
   port: parseInt(process.env.PG_PORT || '5432'),
-  database: process.env.PG_DATABASE || 'digiQC',
+  database: process.env.PG_DATABASE || 'digiqc_new',
   user: process.env.PG_USER || 'postgres',
   password: process.env.PG_PASSWORD || 'root',
 });

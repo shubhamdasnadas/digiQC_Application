@@ -63,14 +63,13 @@ export async function PUT(request: NextRequest) {
     await orgQuery(payload.orgId!,
       `UPDATE teams
        SET name = $1, type = $2, team_lead_name = $3, spoc_name = $4
-       WHERE id = $5 AND organization_id = $6`,
+       WHERE id = $5`,
       [
         body.name,
         body.type ?? 'developer',
         body.team_lead_name ?? '',
         body.spoc_name ?? '',
         id,
-        payload.orgId
       ]
     );
 
@@ -89,7 +88,7 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id');
 
     if (id) {
-      await orgQuery(payload.orgId!, 'DELETE FROM teams WHERE id = $1 AND organization_id = $2', [id, payload.orgId]);
+      await orgQuery(payload.orgId!, 'DELETE FROM teams WHERE id = $1', [id]);
     } else {
       await orgQuery(payload.orgId!, 'DELETE FROM teams');
     }

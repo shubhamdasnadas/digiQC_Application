@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardList, Plus, X, Loader2, Upload, ChevronDown, FileDown, Edit2, Copy, Trash2 } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
+import EditChecklistModal from '@/components/EditChecklistModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString, parseBoolean } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import type { Checklist, Project } from '@/lib/types';
@@ -16,6 +17,7 @@ export default function Checklists() {
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showTable, setShowTable] = useState(true);
+  const [editingChecklist, setEditingChecklist] = useState<Checklist | null>(null);
   const [form, setForm] = useState({ project_id: '', name: '', uom: '', reference_number: '', template_id: '' });
   const [isTemplate, setIsTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -27,8 +29,8 @@ export default function Checklists() {
     ]);
     const cl = await clRes.json();
     const p = await pRes.json();
-    setChecklists(cl);
-    setProjects(p);
+    setChecklists(Array.isArray(cl) ? cl : []);
+    setProjects(Array.isArray(p) ? p : []);
     if (p.length > 0) setForm(f => ({ ...f, project_id: p[0].id }));
     setLoading(false);
   };
@@ -63,6 +65,7 @@ export default function Checklists() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.name.trim()) return;
     setSaving(true);
     await fetch('/api/checklists', {
       method: 'POST',
@@ -71,7 +74,54 @@ export default function Checklists() {
     });
     setSaving(false);
     setShowAdd(false);
+    setForm({ project_id: projects[0]?.id || '', name: '', uom: '', reference_number: '', template_id: '' });
     load();
+  };
+
+  const handleDelete = async (c: Checklist, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete checklist "${c.name}"?`)) return;
+    try {
+      const res = await fetch(`/api/checklists/${c.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete checklist');
+      load();
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Failed to delete checklist.');
+    }
+  };
+
+  const handleCopy = async (c: Checklist, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      setLoading(true);
+      // Fetch details of this checklist
+      const res = await fetch(`/api/checklists/${c.id}`);
+      if (!res.ok) throw new Error('Failed to fetch checklist details');
+      const detail = await res.json();
+
+      // Create new checklist with (Copy) name
+      const copyName = `${c.name} (Copy)`;
+      const clRes = await fetch('/api/checklists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: copyName,
+          reference_number: c.reference_number ? `${c.reference_number}-COPY` : null,
+          uom: c.uom,
+          project_id: c.project_id || null,
+        }),
+      });
+
+      if (!clRes.ok) throw new Error('Failed to copy checklist');
+
+      // Reload and open the new list
+      await load();
+    } catch (err) {
+      console.error('Copy error:', err);
+      alert('Failed to copy checklist.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -91,7 +141,7 @@ export default function Checklists() {
             <h3 className="font-semibold text-gray-900 dark:text-white">Checklists Table</h3>
             <button
               onClick={() => setShowTable(!showTable)}
-              className="text-teal-600 dark:text-teal-400 text-xs font-medium hover:underline flex items-center gap-1"
+              className="text-orange-500 dark:text-orange-400 text-xs font-medium hover:underline flex items-center gap-1"
             >
               <ChevronDown size={14} className={`transition-transform ${showTable ? 'rotate-180' : ''}`} />
               {showTable ? 'Hide' : 'Show'} Table
@@ -134,9 +184,33 @@ export default function Checklists() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="p-1 hover:text-teal-600 transition-colors" title="Edit"><Edit2 size={14} /></button>
-                          <button className="p-1 hover:text-teal-600 transition-colors" title="Copy"><Copy size={14} /></button>
-                          <button className="p-1 hover:text-red-600 transition-colors" title="Delete"><Trash2 size={14} /></button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingChecklist(c);
+                            }}
+                            className="p-1 hover:text-orange-500 transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopy(c, e)}
+                            className="p-1 hover:text-orange-500 transition-colors"
+                            title="Copy"
+                          >
+                            <Copy size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDelete(c, e)}
+                            className="p-1 hover:text-red-600 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -158,114 +232,122 @@ export default function Checklists() {
         <div className="flex flex-col items-center justify-center py-24 text-gray-400">
           <ClipboardList size={48} className="mb-4 opacity-30" />
           <p className="text-sm font-medium">No checklists yet</p>
-          <p className="text-xs mt-1">Create a checklist linked to a project</p>
+          <p className="text-xs mt-1">Create a checklist to get started</p>
         </div>
       )}
 
-       {showAdd && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-           <div className="absolute inset-0 bg-black/60 glass" onClick={() => setShowAdd(false)} />
-           <div className="relative bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl animate-scale-in overflow-hidden">
-             <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-800">
-               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Checklist</h2>
-               <button onClick={() => setShowAdd(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
-             </div>
-             <form onSubmit={handleAdd} className="p-6 space-y-6">
-               {/* <div className="flex items-center justify-between">
-                 <span className="text-sm text-gray-600 dark:text-gray-400">Valid8 Template</span>
-                 <button 
-                   type="button"
-                   onClick={() => setIsTemplate(!isTemplate)}
-                   className={`w-11 h-6 rounded-full transition-colors relative ${isTemplate ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-700'}`}
-                 >
-                   <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isTemplate ? 'left-6' : 'left-1'}`} />
-                 </button>
-               </div> */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 glass" onClick={() => setShowAdd(false)} />
+          <div className="relative bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl animate-scale-in overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-800">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Checklist</h2>
+              <button onClick={() => setShowAdd(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleAdd} className="p-6 space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    <span className="text-red-500 mr-1">*</span> Name
+                  </label>
+                  <input
+                    required
+                    className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    placeholder="Enter Name"
+                    value={form.name}
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  />
+                </div>
 
-               <div className="space-y-4">
-                 {!isTemplate ? (
-                   <>
-                     <div>
-                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                         <span className="text-red-500 mr-1">*</span> Name
-                       </label>
-                       <input 
-                         required 
-                         className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all" 
-                         placeholder="Enter Name" 
-                         value={form.name} 
-                         onChange={e => setForm(f => ({ ...f, name: e.target.value }))} 
-                       />
-                     </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    <span className="text-red-500 mr-1">*</span> UOM
+                  </label>
+                  <div className="relative">
+                    <select
+                      required
+                      className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none transition-all"
+                      value={form.uom}
+                      onChange={e => setForm(f => ({ ...f, uom: e.target.value }))}
+                    >
+                      <option value="">Select UOM</option>
+                      <option value="m">Meters (m)</option>
+                      <option value="mm">Millimeters (mm)</option>
+                      <option value="kg">Kilograms (kg)</option>
+                      <option value="nos">Numbers (nos)</option>
+                      <option value="sqm">Square Meters (sqm)</option>
+                      <option value="cum">Cubic Meters (cum)</option>
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                      <ChevronDown size={16} />
+                    </div>
+                  </div>
+                </div>
 
-                     <div>
-                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                         <span className="text-red-500 mr-1">*</span> UOM
-                       </label>
-                       <div className="relative">
-                         <select 
-                           required
-                           className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none transition-all" 
-                           value={form.uom} 
-                           onChange={e => setForm(f => ({ ...f, uom: e.target.value }))}
-                         >
-                           <option value="">Select UOM</option>
-                           <option value="m">Meters (m)</option>
-                           <option value="mm">Millimeters (mm)</option>
-                           <option value="kg">Kilograms (kg)</option>
-                           <option value="nos">Numbers (nos)</option>
-                           <option value="sqm">Square Meters (sqm)</option>
-                         </select>
-                         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                           <ChevronDown size={16} />
-                         </div>
-                       </div>
-                     </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reference Number</label>
+                  <input
+                    className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    placeholder="Reference Number"
+                    value={form.reference_number}
+                    onChange={e => setForm(f => ({ ...f, reference_number: e.target.value }))}
+                  />
+                </div>
+              </div>
 
-                     <div>
-                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reference Number</label>
-                       <input 
-                         className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all" 
-                         placeholder="Reference Number" 
-                         value={form.reference_number} 
-                         onChange={e => setForm(f => ({ ...f, reference_number: e.target.value }))} 
-                       />
-                     </div>
-                   </>
-                 ) : (
-                  ""
-                 )}
-               </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAdd(false)}
+                  className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+                >
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : null}
+                  Create Checklist
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-               <div className="flex justify-end gap-3 pt-4">
-                 <button 
-                   type="button" 
-                   onClick={() => setShowAdd(false)} 
-                   className="px-6 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                 >
-                   Cancel
-                 </button>
-                 <button 
-                   type="submit" 
-                   className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2" 
-                   disabled={saving}
-                 >
-                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                   {saving ? 'Saving...' : 'Add'}
-                 </button>
-               </div>
-             </form>
-           </div>
-         </div>
-       )}
+      {editingChecklist && (
+        <EditChecklistModal
+          isOpen={!!editingChecklist}
+          onClose={() => setEditingChecklist(null)}
+          onSaved={load}
+          checklistId={editingChecklist.id}
+          checklist={editingChecklist}
+        />
+      )}
 
-      <ImportModal
-        isOpen={showImport}
-        onClose={() => { setShowImport(false); load(); }}
-        title="Import Checklists"
-        description="Upload an Excel file with columns: Checklist Name, REFERENCE NUMBER, Stage Name, Checkpoint, Type, Photo, Remark"
-        onImport={handleImport}
-      />
+      {showImport && (
+        <ImportModal
+          isOpen={showImport}
+          onClose={() => setShowImport(false)}
+          onImport={handleImport}
+          title="Import Checklists"
+          columns={['Checklist Name', 'UOM', 'REFERENCE NUMBER', 'Stage Name', 'Checkpoint', 'Type', 'Photo', 'Remark']}
+          sampleData={[
+            {
+              'Checklist Name': 'PCC',
+              'UOM': 'sqm',
+              'REFERENCE NUMBER': 'PCC-01',
+              'Stage Name': 'Pre Pour',
+              'Checkpoint': 'Cleaning and preparation done',
+              'Type': 'yes_no',
+              'Photo': 'Yes',
+              'Remark': 'Yes',
+            }
+          ]}
+        />
+      )}
     </div>
   );
 }

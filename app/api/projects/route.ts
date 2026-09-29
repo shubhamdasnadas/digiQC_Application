@@ -40,20 +40,23 @@ export async function GET(request: NextRequest) {
     }
 
     // List — with optional search + status filter
-    const params: any[] = [payload.orgId];
-    let where = 'WHERE organization_id = $1';
+    const params: any[] = [];
+    const whereClauses: string[] = [];
+
     if (status !== 'all') {
       params.push(status);
-      where += ` AND status = $${params.length}`;
+      whereClauses.push(`status = $${params.length}`);
     }
     if (q) {
       params.push(`%${q}%`);
       const i = params.length;
-      where += ` AND (LOWER(name) LIKE $${i} OR LOWER(COALESCE(unique_code,'')) LIKE $${i} OR LOWER(COALESCE(client_name,'')) LIKE $${i} OR LOWER(COALESCE(nomenclature,'')) LIKE $${i})`;
+      whereClauses.push(`(LOWER(name) LIKE $${i} OR LOWER(COALESCE(unique_code,'')) LIKE $${i} OR LOWER(COALESCE(client_name,'')) LIKE $${i} OR LOWER(COALESCE(nomenclature,'')) LIKE $${i})`);
     }
 
+    const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
     const { rows } = await orgQuery(
-      payload.orgId!,
+      payload.orgId ?? null,
       `SELECT p.*,
               (SELECT COUNT(*)::int FROM project_members pm WHERE pm.project_id = p.id) AS member_count,
               (SELECT m.name FROM project_members pm

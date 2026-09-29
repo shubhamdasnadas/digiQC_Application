@@ -27,18 +27,17 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     
-    await orgQuery(payload.orgId!, 
-      `UPDATE members 
-       SET name = $1, email = $2, phone = $3, default_role = $4, teams = $5 
-       WHERE id = $6 AND organization_id = $7`,
+    await orgQuery(payload.orgId!,
+      `UPDATE members
+       SET name = $1, email = $2, phone = $3, default_role = $4, teams = $5
+       WHERE id = $6`,
       [
         body.name,
         body.email ?? '',
         body.phone ?? '',
         body.default_role ?? '',
         body.teams ?? '',
-        id,
-        payload.orgId
+        id
       ]
     );
 

@@ -30,8 +30,13 @@ export default function ChecklistDetail() {
     const [stages, setStages] = useState<ChecklistStage[]>([]);
     const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
     const [activeStageId, setActiveStageId] = useState<string | null>(null);
+
     const [isStageModalOpen, setIsStageModalOpen] = useState(false);
+    const [editingStage, setEditingStage] = useState<ChecklistStage | null>(null);
+
     const [isCheckpointModalOpen, setIsCheckpointModalOpen] = useState(false);
+    const [editingCheckpoint, setEditingCheckpoint] = useState<Checkpoint | null>(null);
+
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -44,10 +49,12 @@ export default function ChecklistDetail() {
             const data = await res.json();
 
             setChecklist(data);
-            setStages(data.stages);
-            setCheckpoints(data.checkpoints);
-            // Removed auto-selection of first stage to match demo behavior
-            // where user must select a stage to view checkpoints.
+            setStages(data.stages || []);
+            setCheckpoints(data.checkpoints || []);
+
+            if (data.stages?.length > 0 && !activeStageId) {
+                setActiveStageId(data.stages[0].id);
+            }
         } catch (error) {
             console.error('Error loading checklist:', error);
         } finally {
@@ -96,6 +103,74 @@ export default function ChecklistDetail() {
         }
     };
 
+    const handleDeleteStage = async (stageId: string, stageName: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm(`Are you sure you want to delete stage "${stageName}" and all its checkpoints?`)) {
+            return;
+        }
+        setSaving(true);
+        try {
+            const res = await fetch(`/api/checklists/${id}/stages?stage_id=${stageId}`, {
+                method: 'DELETE',
+            });
+            if (!res.ok) throw new Error('Failed to delete stage');
+
+            if (activeStageId === stageId) {
+                const remaining = stages.filter(s => s.id !== stageId);
+                setActiveStageId(remaining.length > 0 ? remaining[0].id : null);
+            }
+            await loadData();
+        } catch (err) {
+            console.error('Error deleting stage:', err);
+            alert('Failed to delete stage.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleToggleStageRequirement = async (field: 'witness_required' | 'drawing_required', val: boolean) => {
+        if (!activeStageId) return;
+        const targetStage = stages.find(s => s.id === activeStageId);
+        if (!targetStage) return;
+
+        // Optimistic update
+        setStages(prev => prev.map(s => s.id === activeStageId ? { ...s, [field]: val } : s));
+
+        try {
+            await fetch(`/api/checklists/${id}/stages`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    stage_id: activeStageId,
+                    [field]: val,
+                }),
+            });
+        } catch (err) {
+            console.error(`Error updating stage ${field}:`, err);
+            await loadData();
+        }
+    };
+
+    const handleDeleteCheckpoint = async (cpId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('Are you sure you want to delete this checkpoint?')) {
+            return;
+        }
+        setSaving(true);
+        try {
+            const res = await fetch(`/api/checklists/checkpoints?id=${cpId}`, {
+                method: 'DELETE',
+            });
+            if (!res.ok) throw new Error('Failed to delete checkpoint');
+            await loadData();
+        } catch (err) {
+            console.error('Error deleting checkpoint:', err);
+            alert('Failed to delete checkpoint.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     // Native Drag and Drop Handlers for Stages
     const [draggedStageIdx, setDraggedStageIdx] = useState<number | null>(null);
 
@@ -117,10 +192,12 @@ export default function ChecklistDetail() {
     const onDragOverCp = (e: React.DragEvent) => e.preventDefault();
     const onDropCp = (idx: number) => {
         if (draggedCpIdx === null) return;
-        const newCheckpoints = [...checkpoints];
-        const [removed] = newCheckpoints.splice(draggedCpIdx, 1);
-        newCheckpoints.splice(idx, 0, removed);
-        handleReorderCheckpoints(newCheckpoints);
+        const currentStageCps = checkpoints.filter(cp => cp.stage_id === activeStageId);
+        const otherStageCps = checkpoints.filter(cp => cp.stage_id !== activeStageId);
+        const [removed] = currentStageCps.splice(draggedCpIdx, 1);
+        currentStageCps.splice(idx, 0, removed);
+        const combined = [...otherStageCps, ...currentStageCps];
+        handleReorderCheckpoints(combined);
         setDraggedCpIdx(null);
     };
 
@@ -146,20 +223,19 @@ export default function ChecklistDetail() {
                     >
                         <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
                     </button>
-                    <h1 className="text-lg font-medium text-gray-900 dark:text-white">
-                        {checklist?.name || initialName || 'Loading checklist...'}
-                    </h1>
+                    <div>
+                        <h1 className="text-lg font-medium text-gray-900 dark:text-white">
+                            {checklist?.name || initialName || 'Loading checklist...'}
+                        </h1>
+                        {checklist?.reference_number && (
+                            <span className="text-xs text-gray-400">Ref: {checklist.reference_number}</span>
+                        )}
+                    </div>
                 </div>
                 <div className="flex items-center gap-4">
-                    <button className="flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                        <Upload size={16} /> Import
-                    </button>
-                    <button className="flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                        <Download size={16} /> Export
-                    </button>
                     <button
                         onClick={() => setIsEditModalOpen(true)}
-                        className="flex items-center gap-1.5 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-sm font-medium transition-colors"
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-sm font-medium transition-colors"
                     >
                         <Edit3 size={16} /> Edit
                     </button>
@@ -172,7 +248,10 @@ export default function ChecklistDetail() {
                     <div className="p-6 flex items-center justify-between">
                         <h2 className="text-base font-medium text-gray-900 dark:text-white">Stages</h2>
                         <button
-                            onClick={() => setIsStageModalOpen(true)}
+                            onClick={() => {
+                                setEditingStage(null);
+                                setIsStageModalOpen(true);
+                            }}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-full text-xs font-medium hover:bg-slate-800 transition-colors"
                         >
                             <Plus size={14} /> Add
@@ -192,26 +271,46 @@ export default function ChecklistDetail() {
                                 onDragOver={onDragOverStage}
                                 onDrop={() => onDropStage(idx)}
                                 onClick={() => setActiveStageId(stage.id)}
-                                className={`group flex items-center gap-3 py-2 cursor-pointer transition-all ${activeStageId === stage.id
-                                    ? 'text-gray-900 dark:text-white'
-                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                className={`group flex items-center gap-3 py-2.5 px-2 rounded-lg cursor-pointer transition-all ${activeStageId === stage.id
+                                    ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-semibold'
+                                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 hover:text-gray-900 dark:hover:text-white'
                                     }`}
                             >
-                                <GripVertical size={14} className="text-gray-300 group-hover:text-gray-400 cursor-grab" />
-                                <span className="text-sm font-medium flex-1 truncate">{stage.name}</span>
-                                <div className="flex items-center gap-1">
-                                    <button className="p-1 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"><Pencil size={14} /></button>
-                                    <button className="p-1 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                                <GripVertical size={14} className="text-gray-300 group-hover:text-gray-400 cursor-grab shrink-0" />
+                                <span className="text-sm flex-1 truncate">{stage.name}</span>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingStage(stage);
+                                            setIsStageModalOpen(true);
+                                        }}
+                                        className="p-1 hover:text-orange-500 rounded transition-colors"
+                                        title="Edit Stage"
+                                    >
+                                        <Pencil size={13} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleDeleteStage(stage.id, stage.name, e)}
+                                        className="p-1 hover:text-red-500 rounded transition-colors"
+                                        title="Delete Stage"
+                                    >
+                                        <Trash2 size={13} />
+                                    </button>
                                 </div>
                             </div>
                         ))}
+                        {stages.length === 0 && (
+                            <div className="text-center py-8 text-xs text-gray-400">
+                                No stages yet. Click "+ Add" to create one.
+                            </div>
+                        )}
                     </div>
 
-                    <div className="p-6 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <button className="w-7 h-7 flex items-center justify-center rounded border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50">1</button>
-                        </div>
-                        <span className="text-xs text-gray-400">10 / page</span>
+                    <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs text-gray-400">
+                        <span>{stages.length} stages</span>
                     </div>
                 </div>
 
@@ -220,16 +319,19 @@ export default function ChecklistDetail() {
                     {activeStage ? (
                         <div className="max-w-6xl mx-auto space-y-8">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-medium text-gray-900 dark:text-white">{activeStage.name}</h2>
+                                <div>
+                                    <h2 className="text-xl font-medium text-gray-900 dark:text-white">{activeStage.name}</h2>
+                                    <span className="text-xs text-gray-400">{stageCheckpoints.length} item(s)</span>
+                                </div>
                                 <div className="flex items-center gap-3">
                                     <button
-                                        onClick={() => setIsCheckpointModalOpen(true)}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-full text-xs font-medium hover:bg-slate-800 transition-colors"
+                                        onClick={() => {
+                                            setEditingCheckpoint(null);
+                                            setIsCheckpointModalOpen(true);
+                                        }}
+                                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-xs font-medium transition-colors shadow-sm"
                                     >
                                         <Plus size={14} /> Item
-                                    </button>
-                                    <button className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 rounded-full text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
-                                        <Plus size={14} /> Bulk Items
                                     </button>
                                 </div>
                             </div>
@@ -237,16 +339,30 @@ export default function ChecklistDetail() {
                             {/* Stage Requirements */}
                             <div className="flex items-center gap-8 border-b border-gray-100 dark:border-gray-800 pb-4">
                                 <div className="relative">
-                                    <span className="text-sm font-medium text-gray-900 dark:text-white cursor-pointer">Stage Requirements</span>
+                                    <span className="text-sm font-medium text-gray-900 dark:text-white">Stage Requirements</span>
                                     <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-orange-500 rounded-full" />
                                 </div>
                                 <label className="flex items-center gap-2 cursor-pointer group">
-                                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500" />
-                                    <span className="text-sm text-gray-500 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Witness Required</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!activeStage.witness_required}
+                                        onChange={(e) => handleToggleStageRequirement('witness_required', e.target.checked)}
+                                        className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
+                                    />
+                                    <span className="text-sm text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                                        Witness Required
+                                    </span>
                                 </label>
                                 <label className="flex items-center gap-2 cursor-pointer group">
-                                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500" />
-                                    <span className="text-sm text-gray-500 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Drawing Required</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!activeStage.drawing_required}
+                                        onChange={(e) => handleToggleStageRequirement('drawing_required', e.target.checked)}
+                                        className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
+                                    />
+                                    <span className="text-sm text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                                        Drawing Required
+                                    </span>
                                 </label>
                             </div>
 
@@ -255,12 +371,12 @@ export default function ChecklistDetail() {
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="text-left text-[11px] uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">
-                                            <th className="pb-3 font-medium w-12">ID</th>
+                                            <th className="pb-3 font-medium w-12">#</th>
                                             <th className="pb-3 font-medium">Checkpoint</th>
                                             <th className="pb-3 font-medium w-24">Input</th>
                                             <th className="pb-3 font-medium w-24">Photos</th>
                                             <th className="pb-3 font-medium w-24">Remarks</th>
-                                            <th className="pb-3 font-medium text-right w-20"></th>
+                                            <th className="pb-3 font-medium text-right w-20">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -275,45 +391,81 @@ export default function ChecklistDetail() {
                                             >
                                                 <td className="py-4 text-gray-400 dark:text-gray-500 font-medium">
                                                     <div className="flex items-center gap-2">
-                                                        <GripVertical size={12} className="opacity-0 group-hover:opacity-40 cursor-grab" />
+                                                        <GripVertical size={12} className="opacity-0 group-hover:opacity-40 cursor-grab shrink-0" />
                                                         {idx + 1}
                                                     </div>
                                                 </td>
-                                                <td className="py-4 text-gray-600 dark:text-gray-300 font-normal">{cp.question}</td>
-                                                <td className="py-4 text-gray-400 dark:text-gray-500">{cp.input_type === 'yes_no' ? 'Y/N' : cp.input_type}</td>
+                                                <td className="py-4 text-gray-700 dark:text-gray-200 font-normal">
+                                                    <div dangerouslySetInnerHTML={{ __html: cp.question }} />
+                                                </td>
+                                                <td className="py-4 text-gray-500 dark:text-gray-400 capitalize">
+                                                    {cp.input_type === 'yes_no' ? 'Yes / No' : cp.input_type}
+                                                </td>
                                                 <td className="py-4">
                                                     <div className="flex items-center gap-2">
-                                                        <CheckCircle2 size={16} className="text-green-500" />
+                                                        {(cp as any).photo_required ? (
+                                                            <CheckCircle2 size={16} className="text-green-500" />
+                                                        ) : (
+                                                            <XCircle size={16} className="text-gray-300 dark:text-gray-600" />
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="py-4">
                                                     <div className="flex items-center gap-2">
-                                                        <XCircle size={16} className="text-red-500" />
+                                                        {(cp as any).remark_required ? (
+                                                            <CheckCircle2 size={16} className="text-green-500" />
+                                                        ) : (
+                                                            <XCircle size={16} className="text-gray-300 dark:text-gray-600" />
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="py-4">
                                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button className="p-1 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"><Pencil size={14} /></button>
-                                                        <button className="p-1 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setEditingCheckpoint(cp);
+                                                                setIsCheckpointModalOpen(true);
+                                                            }}
+                                                            className="p-1 hover:text-orange-500 rounded transition-colors"
+                                                            title="Edit Checkpoint"
+                                                        >
+                                                            <Pencil size={14} />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => handleDeleteCheckpoint(cp.id, e)}
+                                                            className="p-1 hover:text-red-500 rounded transition-colors"
+                                                            title="Delete Checkpoint"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
                                                     </div>
                                                 </td>
                                             </tr>
                                         ))}
+                                        {stageCheckpoints.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="py-8 text-center text-xs text-gray-400">
+                                                    No checkpoints in this stage yet. Click "+ Item" above to add one.
+                                                </td>
+                                            </tr>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                            <p>Select a stage to view checkpoints</p>
+                            <p>Select a stage on the left to view checkpoints</p>
                         </div>
                     )}
                 </div>
             </div>
 
             {saving && (
-                <div className="fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-2 rounded-full text-xs flex items-center gap-2 animate-bounce">
-                    <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse"></div>
+                <div className="fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-2 rounded-full text-xs flex items-center gap-2 animate-bounce shadow-lg">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
                     Saving changes...
                 </div>
             )}
@@ -328,17 +480,25 @@ export default function ChecklistDetail() {
 
             <StageFormModal
                 isOpen={isStageModalOpen}
-                onClose={() => setIsStageModalOpen(false)}
+                onClose={() => {
+                    setIsStageModalOpen(false);
+                    setEditingStage(null);
+                }}
                 onSaved={loadData}
                 checklistId={id}
+                stage={editingStage}
             />
 
             <CheckpointFormModal
                 isOpen={isCheckpointModalOpen}
-                onClose={() => setIsCheckpointModalOpen(false)}
+                onClose={() => {
+                    setIsCheckpointModalOpen(false);
+                    setEditingCheckpoint(null);
+                }}
                 onSaved={loadData}
                 checklistId={id}
                 stageId={activeStageId || ''}
+                checkpoint={editingCheckpoint}
             />
         </div>
     );

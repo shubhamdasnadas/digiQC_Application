@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
+import type { ChecklistStage } from '@/lib/types';
 
 interface StageFormValues {
     name: string;
@@ -14,6 +15,7 @@ interface StageFormModalProps {
     onClose: () => void;
     onSaved: () => void;
     checklistId: string;
+    stage?: ChecklistStage | null;
 }
 
 const DEFAULT_VALUES: StageFormValues = {
@@ -27,10 +29,26 @@ export default function StageFormModal({
     onClose,
     onSaved,
     checklistId,
+    stage,
 }: StageFormModalProps) {
     const [values, setValues] = useState<StageFormValues>(DEFAULT_VALUES);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (isOpen) {
+            if (stage) {
+                setValues({
+                    name: stage.name || '',
+                    witness_required: !!stage.witness_required,
+                    drawing_required: !!stage.drawing_required,
+                });
+            } else {
+                setValues(DEFAULT_VALUES);
+            }
+            setError('');
+        }
+    }, [isOpen, stage]);
 
     const handleChange = (key: keyof StageFormValues, value: any) => {
         setValues((v) => ({ ...v, [key]: value }));
@@ -47,15 +65,20 @@ export default function StageFormModal({
         setError('');
 
         try {
+            const isEdit = !!stage?.id;
             const res = await fetch(`/api/checklists/${checklistId}/stages`, {
-                method: 'POST',
+                method: isEdit ? 'PATCH' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(values),
+                body: JSON.stringify(
+                    isEdit
+                        ? { stage_id: stage.id, ...values }
+                        : values
+                ),
             });
 
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
-                throw new Error(d.error || 'Failed to add stage');
+                throw new Error(d.error || (isEdit ? 'Failed to update stage' : 'Failed to add stage'));
             }
 
             onSaved();
@@ -75,7 +98,9 @@ export default function StageFormModal({
             <div className="absolute inset-0 bg-black/60 glass" onClick={onClose} />
             <div className="relative card w-full max-w-md p-8 animate-scale-in bg-white dark:bg-gray-900 rounded-2xl shadow-xl">
                 <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Stage</h2>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                        {stage ? 'Edit Stage' : 'Add Stage'}
+                    </h2>
                     <button
                         type="button"
                         onClick={onClose}
@@ -141,7 +166,7 @@ export default function StageFormModal({
                             className="flex-1 py-2.5 px-4 rounded-xl text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
                         >
                             {saving ? <Loader2 size={16} className="animate-spin" /> : null}
-                            Add
+                            {stage ? 'Save Changes' : 'Add'}
                         </button>
                     </div>
                 </form>

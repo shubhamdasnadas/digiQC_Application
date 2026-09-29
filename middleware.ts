@@ -65,7 +65,7 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    // Decode JWT to check orgId (no signature verify — API routes do that)
+    // Decode JWT to check user session (no signature verify — API routes do that)
     const payload = decodeJwtPayload(token);
     if (!payload || !payload.userId) {
         // Token invalid
@@ -75,17 +75,6 @@ export function middleware(request: NextRequest) {
             `${COOKIE_NAME}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`
         );
         return response;
-    }
-
-    // If user has no active org selected, redirect to select-org
-    // (except for the select-org page itself and auth API calls)
-    if (
-        !payload.orgId &&
-        pathname !== '/select-org' &&
-        !pathname.startsWith('/api/auth/') &&
-        !pathname.startsWith('/api/organizations')
-    ) {
-        return NextResponse.redirect(new URL('/select-org', request.url));
     }
 
     return NextResponse.next();

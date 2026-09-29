@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
-import { X, Bold, Italic, Underline, Link as LinkIcon, Image as ImageIcon, List, ListOrdered, Type } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Bold, Italic, Underline, Link as LinkIcon, Image as ImageIcon, List, ListOrdered, Type, Loader2 } from 'lucide-react';
+import type { Checkpoint } from '@/lib/types';
 
 interface CheckpointFormModalProps {
     isOpen: boolean;
@@ -9,6 +10,7 @@ interface CheckpointFormModalProps {
     onSaved: () => void;
     checklistId: string;
     stageId: string;
+    checkpoint?: Checkpoint | null;
 }
 
 const DEFAULT_FORM = {
@@ -17,6 +19,8 @@ const DEFAULT_FORM = {
     input_type: 'yes_no',
     photo_required: false,
     remark_required: false,
+    drawing_required: false,
+    witness_required: false,
     options: [
         { value: 'Yes', qc_fail: false },
         { value: 'No', qc_fail: true }
@@ -28,35 +32,110 @@ const DEFAULT_FORM = {
     }
 };
 
-export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklistId, stageId }: CheckpointFormModalProps) {
+export default function CheckpointFormModal({
+    isOpen,
+    onClose,
+    onSaved,
+    checklistId,
+    stageId,
+    checkpoint
+}: CheckpointFormModalProps) {
     const [form, setForm] = useState(DEFAULT_FORM);
     const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const questionRef = useRef<HTMLDivElement>(null);
     const [uploadType, setUploadType] = useState<'link' | 'image' | null>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            if (checkpoint) {
+                setForm({
+                    name: checkpoint.question || '',
+                    question: checkpoint.question || '',
+                    input_type: checkpoint.input_type || 'yes_no',
+                    photo_required: !!(checkpoint as any).photo_required,
+                    remark_required: !!(checkpoint as any).remark_required,
+                    drawing_required: !!checkpoint.drawing_required,
+                    witness_required: !!checkpoint.witness_required,
+                    options: [
+                        { value: 'Yes', qc_fail: false },
+                        { value: 'No', qc_fail: true }
+                    ],
+                    numeric_condition: {
+                        operator: '<=',
+                        value: '',
+                        qc_result: 'fail'
+                    }
+                });
+                if (questionRef.current) {
+                    questionRef.current.innerHTML = checkpoint.question || '';
+                }
+            } else {
+                setForm(DEFAULT_FORM);
+                if (questionRef.current) {
+                    questionRef.current.innerHTML = '';
+                }
+            }
+            setError('');
+        }
+    }, [isOpen, checkpoint]);
 
     if (!isOpen) return null;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const effectiveQuestion = form.question.trim() || form.name.trim();
+        if (!effectiveQuestion) {
+            setError('Please enter a checkpoint question or name.');
+            return;
+        }
+
         setSaving(true);
+        setError('');
+
         try {
-            const res = await fetch('/api/checklists/checkpoints', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+            const isEdit = !!checkpoint?.id;
+            const url = '/api/checklists/checkpoints';
+            const payload = isEdit
+                ? {
+                    id: checkpoint.id,
+                    question: effectiveQuestion,
+                    input_type: form.input_type,
+                    photo_required: form.photo_required,
+                    remark_required: form.remark_required,
+                    drawing_required: form.drawing_required,
+                    witness_required: form.witness_required,
+                }
+                : {
                     checklist_id: checklistId,
                     stage_id: stageId,
-                    ...form
-                }),
+                    question: effectiveQuestion,
+                    name: form.name,
+                    input_type: form.input_type,
+                    photo_required: form.photo_required,
+                    remark_required: form.remark_required,
+                    drawing_required: form.drawing_required,
+                    witness_required: form.witness_required,
+                };
+
+            const res = await fetch(url, {
+                method: isEdit ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
             });
-            if (!res.ok) throw new Error('Failed to save checkpoint');
+
+            if (!res.ok) {
+                const d = await res.json().catch(() => ({}));
+                throw new Error(d.error || (isEdit ? 'Failed to update checkpoint' : 'Failed to save checkpoint'));
+            }
+
             onSaved();
             onClose();
             setForm(DEFAULT_FORM);
             if (questionRef.current) questionRef.current.innerHTML = '';
-        } catch (error) {
-            console.error('Error saving checkpoint:', error);
+        } catch (err) {
+            setError((err as Error).message);
         } finally {
             setSaving(false);
         }
@@ -96,8 +175,6 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
             if (uploadType === 'image') {
                 executeCommand('insertImage', base64);
             } else if (uploadType === 'link') {
-                // For files, we insert a link with the base64 data or a placeholder
-                // Since standard links are URLs, we'll treat it as a downloadable link
                 executeCommand('createLink', base64);
             }
         };
@@ -114,34 +191,41 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 glass" onClick={onClose} />
-            <div className="relative bg-white dark:bg-gray-900 w-full max-w-2xl rounded-2xl shadow-2xl animate-scale-in overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Stage Item</h2>
-                    <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all">
-                        <X size={16} />
+            <div className="relative bg-white dark:bg-gray-900 w-full max-w-2xl rounded-2xl shadow-2xl animate-scale-in overflow-hidden max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800 shrink-0">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        {checkpoint ? 'Edit Stage Item' : 'Add Stage Item'}
+                    </h2>
+                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all">
+                        <X size={18} />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-4 space-y-4">
+                <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                                <span className="text-red-500 mr-1">*</span> Checkpoint Name
+                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                                <span className="text-red-500 mr-1">*</span> Checkpoint Name / Title
                             </label>
                             <input
                                 type="text"
                                 required
                                 value={form.name}
-                                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                                onChange={(e) => {
+                                    setForm({ ...form, name: e.target.value, question: e.target.value });
+                                    if (questionRef.current && (!questionRef.current.innerHTML || questionRef.current.innerHTML === form.question)) {
+                                        questionRef.current.innerHTML = e.target.value;
+                                    }
+                                }}
+                                className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                                 placeholder="e.g. Foundation Level Check"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                                <span className="text-red-500 mr-1">*</span> Checklist Point
+                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                                Checklist Point Details / Question
                             </label>
-                            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-teal-500">
+                            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-orange-500">
                                 <div className="flex items-center gap-1 p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                                     <button type="button" onClick={() => executeCommand('bold')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><Bold size={14} /></button>
                                     <button type="button" onClick={() => executeCommand('italic')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><Italic size={14} /></button>
@@ -163,51 +247,43 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
                                         setForm((f) => ({ ...f, question: html }));
                                     }}
                                     className="w-full p-3 text-sm text-gray-900 dark:text-white bg-transparent focus:outline-none min-h-[80px]"
-                                    onBlur={(e) => {
-                                        if (e.currentTarget.innerHTML === '') {
-                                            // Handle required validation if empty
-                                        }
-                                    }}
                                 />
                             </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-6 items-end">
-                        <div className="col-span-1">
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Type</label>
+                    <div className="grid grid-cols-3 gap-4 items-center pt-2">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Input Type</label>
                             <div className="relative">
                                 <select
                                     value={form.input_type}
                                     onChange={(e) => setForm({ ...form, input_type: e.target.value })}
-                                    className="w-full p-2.5 border border-gray-300 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none px-3"
+                                    className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none px-3"
                                 >
                                     <option value="yes_no">Yes/No</option>
                                     <option value="options">Options</option>
                                     <option value="text">Text</option>
                                     <option value="numeric">Numeric</option>
                                 </select>
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                                </div>
                             </div>
                         </div>
-                        <div className="col-span-1">
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">EQC Photo Required</label>
-                            <button 
+                        <div className="flex flex-col items-center">
+                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Photo Required</label>
+                            <button
                                 type="button"
                                 onClick={() => setForm(f => ({ ...f, photo_required: !f.photo_required }))}
-                                className={`w-11 h-6 rounded-full transition-colors relative ${form.photo_required ? 'bg-gray-400' : 'bg-gray-200 dark:bg-gray-700'}`}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${form.photo_required ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}`}
                             >
                                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${form.photo_required ? 'left-6' : 'left-1'}`} />
                             </button>
                         </div>
-                        <div className="col-span-1">
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Remarks Required</label>
-                            <button 
+                        <div className="flex flex-col items-center">
+                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Remarks Required</label>
+                            <button
                                 type="button"
                                 onClick={() => setForm(f => ({ ...f, remark_required: !f.remark_required }))}
-                                className={`w-11 h-6 rounded-full transition-colors relative ${form.remark_required ? 'bg-gray-400' : 'bg-gray-200 dark:bg-gray-700'}`}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${form.remark_required ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}`}
                             >
                                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${form.remark_required ? 'left-6' : 'left-1'}`} />
                             </button>
@@ -215,9 +291,9 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
                     </div>
 
                     {form.input_type === 'yes_no' && (
-                        <div className="space-y-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Yes/No Configuration</h3>
-                            <div className="space-y-4">
+                        <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800">
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Yes/No Configuration</h3>
+                            <div className="space-y-2">
                                 {form.options.map((opt, idx) => (
                                     <div key={idx} className="flex items-center justify-between gap-4">
                                         <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">{opt.value}</span>
@@ -237,16 +313,16 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
                     )}
 
                     {form.input_type === 'options' && (
-                        <div className="space-y-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Options Configuration</h3>
-                            <div className="space-y-4">
+                        <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800">
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Options Configuration</h3>
+                            <div className="space-y-3">
                                 {form.options.map((opt, idx) => (
                                     <div key={idx} className="flex items-center gap-3">
                                         <input
                                             type="text"
                                             value={opt.value}
                                             onChange={(e) => updateOption(idx, 'value', e.target.value)}
-                                            className="flex-1 p-2 border border-gray-200 dark:border-gray-700 rounded-full text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 px-3"
+                                            className="flex-1 p-2 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 px-3"
                                             placeholder="Enter value"
                                         />
                                         <div className="flex items-center gap-2 shrink-0">
@@ -272,71 +348,70 @@ export default function CheckpointFormModal({ isOpen, onClose, onSaved, checklis
                     )}
 
                     {form.input_type === 'numeric' && (
-                        <div className="space-y-4 pt-4 border-t border-dashed border-gray-300 dark:border-gray-700">
+                        <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-800">
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Numeric Criteria</h3>
                             <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
-                                <span className="text-gray-600 dark:text-gray-400">If value is</span>
-                                <div className="relative">
-                                    <select 
-                                        value={form.numeric_condition.operator}
-                                        onChange={(e) => updateNumericCondition('operator', e.target.value)}
-                                        className="p-2 border border-orange-400 rounded-full text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none px-3 pr-8"
-                                    >
-                                        {['<=', '>=', '=', '<', '>'].map(op => (
-                                            <option key={op} value={op}>{op}</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                                    </div>
-                                </div>
+                                <span className="text-xs text-gray-600 dark:text-gray-400">If value is</span>
+                                <select
+                                    value={form.numeric_condition.operator}
+                                    onChange={(e) => updateNumericCondition('operator', e.target.value)}
+                                    className="p-1.5 border border-orange-400 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 px-2"
+                                >
+                                    {['<=', '>=', '=', '<', '>'].map(op => (
+                                        <option key={op} value={op}>{op}</option>
+                                    ))}
+                                </select>
                                 <input
                                     type="number"
                                     value={form.numeric_condition.value}
                                     onChange={(e) => updateNumericCondition('value', e.target.value)}
-                                    className="p-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-orange-500 w-32 px-3"
-                                    placeholder="Enter Number"
+                                    className="p-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-xs outline-none focus:ring-2 focus:ring-orange-500 w-28 px-2"
+                                    placeholder="Number"
                                 />
-                                <span className="text-gray-600 dark:text-gray-400">then,</span>
-                                <div className="flex items-center gap-4 ml-2">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input 
-                                            type="radio" 
-                                            name="qc_result" 
-                                            checked={form.numeric_condition.qc_result === 'fail'} 
+                                <span className="text-xs text-gray-600 dark:text-gray-400">then,</span>
+                                <div className="flex items-center gap-3 ml-2">
+                                    <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+                                        <input
+                                            type="radio"
+                                            name="qc_result"
+                                            checked={form.numeric_condition.qc_result === 'fail'}
                                             onChange={() => updateNumericCondition('qc_result', 'fail')}
-                                            className="w-4 h-4 text-orange-500 focus:ring-orange-500"
+                                            className="w-3.5 h-3.5 text-orange-500 focus:ring-orange-500"
                                         />
-                                        <span className="text-xs text-gray-600 dark:text-gray-400">Mark for QC fail</span>
+                                        <span>QC Fail</span>
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input 
-                                            type="radio" 
-                                            name="qc_result" 
-                                            checked={form.numeric_condition.qc_result === 'pass'} 
+                                    <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+                                        <input
+                                            type="radio"
+                                            name="qc_result"
+                                            checked={form.numeric_condition.qc_result === 'pass'}
                                             onChange={() => updateNumericCondition('qc_result', 'pass')}
-                                            className="w-4 h-4 text-orange-500 focus:ring-orange-500"
+                                            className="w-3.5 h-3.5 text-orange-500 focus:ring-orange-500"
                                         />
-                                        <span className="text-xs text-gray-600 dark:text-gray-400">Mark for QC pass</span>
+                                        <span>QC Pass</span>
                                     </label>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    <div className="flex justify-end gap-3 pt-6">
+                    {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-6 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                            className="px-5 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-xl text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={saving}
-                            className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-sm font-medium transition-colors disabled:opacity-50"
+                            className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
-                            {saving ? 'Saving...' : 'Add'}
+                            {saving ? <Loader2 size={16} className="animate-spin" /> : null}
+                            {checkpoint ? 'Save Changes' : 'Add Item'}
                         </button>
                     </div>
                 </form>

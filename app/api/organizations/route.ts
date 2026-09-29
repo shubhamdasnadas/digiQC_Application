@@ -38,11 +38,9 @@ export async function POST(request: Request) {
       await client.query('COMMIT');
       client.release();
 
-      // If this is a single new org, create its schema and return the ID
+      // If this is a single new org, return the ID
       if (insertedIds.length === 1) {
         const orgId = insertedIds[0];
-        // Auto-create the org schema via the DB function
-        await pool.query('SELECT public.create_org_schema($1)', [orgId]);
         return NextResponse.json({ success: true, organizationId: orgId });
       }
       return NextResponse.json({ success: true });

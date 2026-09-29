@@ -19,18 +19,22 @@ export default function ChecklistsTab() {
 
   const load = async () => {
     setLoading(true);
-    // The global /api/checklists endpoint returns this org's checklists (across all
-    // projects) plus the shared checklist library, all in one list.
-    const res = await fetch('/api/checklists');
-    const data = await res.json();
-    if (Array.isArray(data)) {
-      setChecklists(data.filter((c: any) => c.project_id === id));
-      setLibraryChecklists(data.filter((c: any) => c.source === 'library'));
-    } else {
+    try {
+      const [projRes, libRes] = await Promise.all([
+        fetch(`/api/checklists?project_id=${id}`),
+        fetch('/api/checklists/library'),
+      ]);
+      const projData = await projRes.json().catch(() => []);
+      const libData = await libRes.json().catch(() => []);
+
+      setChecklists(Array.isArray(projData) ? projData : []);
+      setLibraryChecklists(Array.isArray(libData) ? libData : []);
+    } catch {
       setChecklists([]);
       setLibraryChecklists([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id]);
@@ -43,7 +47,7 @@ export default function ChecklistsTab() {
       render: (c) => (
         <button
           onClick={() => router.push(`/projects/${id}/checklists/${c.id}?name=${encodeURIComponent(c.name)}`)}
-          className="text-sm font-medium text-gray-900 dark:text-white hover:text-teal-600 dark:hover:text-teal-400 hover:underline transition-colors"
+          className="text-sm font-medium text-gray-900 dark:text-white hover:text-orange-500 dark:hover:text-orange-400 hover:underline transition-colors text-left"
         >
           {c.name}
         </button>
@@ -67,14 +71,14 @@ export default function ChecklistsTab() {
         <div className="flex items-center justify-end gap-1">
           <button
             onClick={() => setEditing(c)}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-teal-50 hover:text-teal-600 dark:hover:bg-teal-500/10"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-500 dark:hover:bg-orange-500/10 transition-colors"
             title="Edit"
           >
             <Pencil size={13} />
           </button>
           <button
             onClick={() => setDeleting(c)}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10 transition-colors"
             title="Delete"
           >
             <Trash2 size={13} />
@@ -142,7 +146,6 @@ function EditChecklistModal({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) { setError('Name is required.'); return; }
-    if (!referenceNumber.trim()) { setError('Reference number is required.'); return; }
     setSaving(true);
     setError('');
     try {
@@ -171,7 +174,7 @@ function EditChecklistModal({
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Reference Number *</label>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Reference Number</label>
             <input className="input" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
@@ -237,7 +240,7 @@ function DeleteChecklistModal({
 
 function AddChecklistModal({
   projectId,
-  libraryChecklists,
+  libraryChecklists: initialLibraryChecklists,
   onClose,
   onSaved,
 }: {
@@ -246,7 +249,9 @@ function AddChecklistModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [mode, setMode] = useState<'existing' | 'new'>(libraryChecklists.length > 0 ? 'existing' : 'new');
+  const [libraryList, setLibraryList] = useState<Checklist[]>(initialLibraryChecklists || []);
+  const [loadingLib, setLoadingLib] = useState(false);
+  const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [selectedId, setSelectedId] = useState('');
   const [search, setSearch] = useState('');
   const [showResults, setShowResults] = useState(false);
@@ -256,10 +261,35 @@ function AddChecklistModal({
   const [error, setError] = useState('');
   const searchBoxRef = useRef<HTMLDivElement>(null);
 
-  const matches = libraryChecklists.filter(c => {
+  useEffect(() => {
+    async function fetchLib() {
+      setLoadingLib(true);
+      try {
+        const res = await fetch('/api/checklists/library');
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setLibraryList(data);
+        } else {
+          // fallback to all checklists
+          const allRes = await fetch('/api/checklists');
+          const allData = await allRes.json();
+          if (Array.isArray(allData)) {
+            setLibraryList(allData);
+          }
+        }
+      } catch {
+        // keep initial
+      } finally {
+        setLoadingLib(false);
+      }
+    }
+    fetchLib();
+  }, []);
+
+  const matches = libraryList.filter(c => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
-    return c.name.toLowerCase().includes(q);
+    return c.name.toLowerCase().includes(q) || (c.reference_number && c.reference_number.toLowerCase().includes(q));
   });
 
   useEffect(() => {
@@ -289,7 +319,7 @@ function AddChecklistModal({
     setError('');
 
     if (mode === 'existing') {
-      const picked = libraryChecklists.find(c => c.id === selectedId);
+      const picked = libraryList.find(c => c.id === selectedId);
       if (!picked) { setError('Select a checklist from the library.'); return; }
       setSaving(true);
       try {
@@ -301,11 +331,8 @@ function AddChecklistModal({
     }
 
     if (!name.trim()) { setError('Name is required.'); return; }
-    if (!referenceNumber.trim()) { setError('Reference number is required.'); return; }
     setSaving(true);
     try {
-      // Add the new checklist to the shared library first so it's reusable by other
-      // projects, then link it into this project's checklist list.
       const libRes = await fetch('/api/checklists/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -331,14 +358,14 @@ function AddChecklistModal({
           <button
             type="button"
             onClick={() => setMode('existing')}
-            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'existing' ? 'bg-white dark:bg-gray-950 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'existing' ? 'bg-white dark:bg-gray-950 text-orange-500 dark:text-orange-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
           >
             Existing Checklist
           </button>
           <button
             type="button"
             onClick={() => setMode('new')}
-            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'new' ? 'bg-white dark:bg-gray-950 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'new' ? 'bg-white dark:bg-gray-950 text-orange-500 dark:text-orange-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
           >
             New Checklist
           </button>
@@ -346,7 +373,12 @@ function AddChecklistModal({
 
         <form onSubmit={submit} className="space-y-3">
           {mode === 'existing' ? (
-            libraryChecklists.length > 0 ? (
+            loadingLib ? (
+              <div className="py-6 flex items-center justify-center text-xs text-gray-500 gap-2">
+                <Loader2 size={16} className="animate-spin text-orange-500" />
+                <span>Loading existing checklists…</span>
+              </div>
+            ) : libraryList.length > 0 ? (
               <div ref={searchBoxRef} className="relative">
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Checklist *</label>
                 <div className="relative">
@@ -354,7 +386,7 @@ function AddChecklistModal({
                   <input
                     type="text"
                     className="input pl-9"
-                    placeholder="Search checklists…"
+                    placeholder="Search checklists by name or reference number…"
                     value={search}
                     onChange={(e) => { setSearch(e.target.value); setSelectedId(''); setShowResults(true); }}
                     onFocus={() => setShowResults(true)}
@@ -371,13 +403,24 @@ function AddChecklistModal({
                           setSearch(c.name);
                           setShowResults(false);
                         }}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${selectedId === c.id ? 'bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400' : 'text-gray-700 dark:text-gray-300'}`}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-100 dark:border-gray-800/50 last:border-0 ${selectedId === c.id ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
                       >
-                        <span className="font-medium">{c.name}</span>
+                        <div className="font-medium">{c.name}</div>
+                        {c.reference_number && (
+                          <div className="text-[11px] text-gray-400 font-mono">{c.reference_number}</div>
+                        )}
                       </button>
                     )) : (
-                      <p className="px-3 py-2 text-sm text-gray-400">No matches</p>
+                      <p className="px-3 py-2 text-sm text-gray-400">No matches found</p>
                     )}
+                  </div>
+                )}
+                {selectedId && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-orange-50/50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-xs flex items-center justify-between">
+                    <div>
+                      <span className="font-medium text-orange-900 dark:text-orange-300">Selected: </span>
+                      <span className="text-gray-700 dark:text-gray-300">{libraryList.find(c => c.id === selectedId)?.name}</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -391,7 +434,7 @@ function AddChecklistModal({
                 <input className="input" placeholder="Pre-pour Concrete Check" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Reference Number *</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Reference Number</label>
                 <input className="input" placeholder="PCPL/EXEC/BEAM-SLB/2026/0001" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
               </div>
             </>
@@ -399,7 +442,7 @@ function AddChecklistModal({
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-            <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving || (mode === 'existing' && libraryChecklists.length === 0)}>
+            <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving || (mode === 'existing' && !selectedId)}>
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
               {saving ? 'Saving…' : 'Add'}
             </button>
