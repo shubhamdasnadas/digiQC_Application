@@ -45,7 +45,12 @@ export function middleware(request: NextRequest) {
     }
 
     // Public API prefixes (auth endpoints)
-    if (pathname.startsWith('/api/auth/login') || pathname.startsWith('/api/auth/register')) {
+    if (
+        pathname.startsWith('/api/auth/login') ||
+        pathname.startsWith('/api/auth/register') ||
+        pathname.startsWith('/api/auth/verify-otp') ||
+        pathname.startsWith('/api/auth/resend-otp')
+    ) {
         return NextResponse.next();
     }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findUserByEmail, verifyPassword, signToken, setCookieHeader, getUserOrgs } from '@/lib/auth';
-import pool from '@/lib/db';
+import { findUserByEmail, verifyPassword } from '@/lib/auth';
+import { generateAndSaveOtp } from '@/lib/otp';
+import { sendOtpEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
     try {
@@ -20,33 +21,26 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
         }
 
-        // Get orgs the user belongs to
-        const orgs = await getUserOrgs(user.id);
+        // Credentials are valid, now generate 6-digit OTP
+        const otp = await generateAndSaveOtp(user.email);
 
-        // Find default active org if any
-        const defaultOrg = orgs.length > 0 ? orgs[0] : null;
+        // Send OTP via SMTP to the user's email
+        try {
+            await sendOtpEmail(user.email, otp, user.name);
+        } catch (mailError) {
+            console.error('Failed to send OTP email:', mailError);
+            return NextResponse.json(
+                { error: 'Failed to send OTP email: ' + ((mailError as Error).message || 'SMTP error') },
+                { status: 500 }
+            );
+        }
 
-        const token = signToken({
-            userId: user.id,
+        return NextResponse.json({
+            success: true,
+            requireOtp: true,
             email: user.email,
-            orgId: defaultOrg?.id || null,
-            role: defaultOrg?.role || null,
+            message: `A 6-digit verification code has been sent to ${user.email}`,
         });
-
-        const response = NextResponse.json({
-            user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                avatar_url: user.avatar_url,
-                created_at: user.created_at,
-            },
-            orgs,
-            currentOrg: defaultOrg,
-        });
-
-        response.headers.set('Set-Cookie', setCookieHeader(token));
-        return response;
     } catch (error) {
         return NextResponse.json({ error: (error as Error).message }, { status: 500 });
     }
