@@ -1,9 +1,0 @@
-PG_HOST=localhost
-PG_PORT=5432
-PG_DATABASE=digiqc_new
-PG_USER=postgres
-PG_PASSWORD=root
-DATABASE_URL=postgresql://postgres:root@localhost:5432/digiqc_new
-JWT_SECRET=digiqc-saas-jwt-secret-change-in-prod
-
-klfvmdfkmv
