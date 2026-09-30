@@ -10,7 +10,7 @@ export async function ensureChecklistSchema(_orgId?: string) {
         reference_number text,
         uom text DEFAULT '',
         status text DEFAULT 'draft',
-        updated_by uuid,
+        updated_by text,
         updated_at timestamptz DEFAULT now(),
         created_at timestamptz DEFAULT now()
       );
@@ -40,9 +40,17 @@ export async function ensureChecklistSchema(_orgId?: string) {
       ALTER TABLE public.library_checklists ADD COLUMN IF NOT EXISTS reference_number text;
       ALTER TABLE public.library_checklists ADD COLUMN IF NOT EXISTS uom text DEFAULT '';
       ALTER TABLE public.library_checklists ADD COLUMN IF NOT EXISTS status text DEFAULT 'draft';
-      ALTER TABLE public.library_checklists ADD COLUMN IF NOT EXISTS updated_by uuid;
+      ALTER TABLE public.library_checklists ADD COLUMN IF NOT EXISTS updated_by text;
       ALTER TABLE public.library_checklists ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
       ALTER TABLE public.library_checklists ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+      DO $$
+      BEGIN
+        BEGIN
+          ALTER TABLE public.library_checklists ALTER COLUMN updated_by TYPE text USING updated_by::text;
+        EXCEPTION
+          WHEN others THEN NULL;
+        END;
+      END $$;
 
       ALTER TABLE public.library_stages ADD COLUMN IF NOT EXISTS witness_required boolean DEFAULT false;
       ALTER TABLE public.library_stages ADD COLUMN IF NOT EXISTS drawing_required boolean DEFAULT false;
@@ -55,10 +63,16 @@ export async function ensureChecklistSchema(_orgId?: string) {
       ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS drawing_required;
       ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS witness_required;
 
-      -- Drop unique constraint on reference_number so multiple projects can share reference numbers or clone library checklists
+      -- Drop unique constraint and not-null on reference_number so multiple projects can share reference numbers or have optional reference numbers
       ALTER TABLE public.library_checklists DROP CONSTRAINT IF EXISTS library_checklists_reference_number_key;
       ALTER TABLE public.library_checklists DROP CONSTRAINT IF EXISTS library_checklists_name_key;
       DROP INDEX IF EXISTS public.library_checklists_reference_number_key;
+      ALTER TABLE public.library_checklists ALTER COLUMN reference_number DROP NOT NULL;
+      ALTER TABLE public.library_checklists ALTER COLUMN reference_number SET DEFAULT '';
+      ALTER TABLE public.library_checklists ALTER COLUMN uom DROP NOT NULL;
+      ALTER TABLE public.library_checklists ALTER COLUMN uom SET DEFAULT '';
+      ALTER TABLE public.library_checklists ALTER COLUMN status DROP NOT NULL;
+      ALTER TABLE public.library_checklists ALTER COLUMN status SET DEFAULT 'draft';
 
       -- Remove legacy tables
       DROP TABLE IF EXISTS public.checkpoints CASCADE;

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ClipboardList, Plus, X, Loader2, Upload, ChevronDown, FileDown, Edit2, Copy, Trash2 } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
 import EditChecklistModal from '@/components/EditChecklistModal';
-import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString, parseBoolean } from '@/lib/excelImport';
+import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString, parseBoolean, getField } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import type { Checklist, Project } from '@/lib/types';
 
@@ -38,29 +38,78 @@ export default function Checklists() {
   useEffect(() => { load(); }, []);
 
   const handleImport = async (data: ParsedRow[]): Promise<ImportResult> => {
+    let lastChecklistName = '';
+    let lastRefNum = '';
+    let lastStageName = 'Single Stage';
+
+    const normalizedData = data.map(r => {
+      let name = sanitizeString(getField(r, 'Checklist Name', 'Checklist', 'checklist_name', 'checklist', 'name', 'Name'));
+      let refNum = sanitizeString(getField(r, 'REFERENCE NUMBER', 'Reference Number', 'Reference No', 'reference_number', 'reference_no', 'Ref No', 'ref_no'));
+      let stageName = sanitizeString(getField(r, 'Stage Name', 'Stage', 'stage_name', 'stage'));
+      const checkpoint = sanitizeString(getField(r, 'Checkpoint', 'checkpoint', 'Checkpoint Name', 'checkpoint_name', 'Question', 'question'));
+
+      if (name) {
+        lastChecklistName = name;
+      } else if (checkpoint && lastChecklistName) {
+        name = lastChecklistName;
+      }
+
+      if (refNum) {
+        lastRefNum = refNum;
+      } else if (checkpoint && lastRefNum && name === lastChecklistName) {
+        refNum = lastRefNum;
+      }
+
+      if (stageName) {
+        lastStageName = stageName;
+      } else if (checkpoint && lastStageName) {
+        stageName = lastStageName;
+      }
+
+      const rawType = sanitizeString(getField(r, 'Type', 'type', 'yn', 'Input Type', 'input_type') || 'yes_no');
+      const uom = sanitizeString(getField(r, 'UOM', 'uom', 'Unit', 'unit') || '');
+
+      let inputType: 'yes_no' | 'text' | 'numeric' | 'options' | 'date' = 'yes_no';
+      const typeUpper = rawType.toUpperCase().trim();
+      if (typeUpper === 'TEXT' || typeUpper === 'STRING') {
+        inputType = 'text';
+      } else if (typeUpper === 'NUMERIC' || typeUpper === 'NUMBER') {
+        inputType = 'numeric';
+      } else if (typeUpper === 'DATE') {
+        inputType = 'date';
+      } else if (typeUpper === 'OPTIONS') {
+        inputType = 'options';
+      } else {
+        inputType = 'yes_no';
+      }
+
+      const photoRaw = getField(r, 'Photo', 'photo', 'Photo Required', 'photo_required');
+      const remarkRaw = getField(r, 'Remark', 'remark', 'Remark Required', 'remark_required');
+
+      return {
+        project_id: null,
+        name: name || lastChecklistName || 'Unnamed Checklist',
+        reference_number: refNum || '',
+        uom,
+        stage_name: stageName || lastStageName || 'Single Stage',
+        checkpoint,
+        input_type: inputType,
+        photo_required: parseBoolean(photoRaw),
+        remark_required: parseBoolean(remarkRaw),
+      };
+    }).filter(r => r.name && (r.checkpoint || r.stage_name));
+
     return bulkInsertWithChunking(async (chunk) => {
-      const proj = projects[0];
-      const rows = chunk.map(r => {
-        const yn = sanitizeString(r['Type'] || r.yn || 'yes_no');
-        return {
-          project_id: proj?.id || '',
-          name: sanitizeString(r['Checklist Name'] || r.checklist_name || r.name || 'Unnamed'),
-          reference_number: sanitizeString(r['REFERENCE NUMBER'] || r.reference_number || ''),
-          uom: sanitizeString(r['UOM'] || r.uom || ''),
-          stage_name: sanitizeString(r['Stage Name'] || r.stage_name || ''),
-          checkpoint: sanitizeString(r['Checkpoint'] || r.checkpoint || ''),
-          input_type: yn.trim().toUpperCase() === 'TEXT' ? 'text' : 'yes_no',
-          photo_required: parseBoolean(r['Photo'] ?? r.photo),
-          remark_required: parseBoolean(r['Remark'] ?? r.remark),
-        };
-      });
       const res = await fetch('/api/checklists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows }),
+        body: JSON.stringify({ rows: chunk }),
       });
-      if (!res.ok) throw new Error(await res.text());
-    }, data);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || (await res.text()) || 'Failed to import checklists');
+      }
+    }, normalizedData);
   };
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -331,20 +380,24 @@ export default function Checklists() {
       {showImport && (
         <ImportModal
           isOpen={showImport}
-          onClose={() => setShowImport(false)}
+          onClose={() => {
+            setShowImport(false);
+            load();
+          }}
           onImport={handleImport}
           title="Import Checklists"
-          columns={['Checklist Name', 'UOM', 'REFERENCE NUMBER', 'Stage Name', 'Checkpoint', 'Type', 'Photo', 'Remark']}
+          description="Upload an Excel file (.xlsx, .xls) or CSV containing Checklist Name, REFERENCE NUMBER, Stage Name, Checkpoint, Type, Photo, and Remark columns."
+          columns={['Checklist Name', 'REFERENCE NUMBER', 'Stage Name', 'Checkpoint', 'Type', 'Photo', 'Remark', 'UOM']}
           sampleData={[
             {
-              'Checklist Name': 'PCC',
-              'UOM': 'sqm',
-              'REFERENCE NUMBER': 'PCC-01',
-              'Stage Name': 'Pre Pour',
-              'Checkpoint': 'Cleaning and preparation done',
-              'Type': 'yes_no',
-              'Photo': 'Yes',
-              'Remark': 'Yes',
+              'Checklist Name': 'Arch - Beam & Slab Checking',
+              'REFERENCE NUMBER': 'PCPL/ARCH/BEAM-SLAB-SHT/2024/0001',
+              'Stage Name': 'Single Stage',
+              'Checkpoint': 'Slab Shuttering Measurements checked properly?',
+              'Type': 'Y/N',
+              'Photo': 'FALSE',
+              'Remark': 'TRUE',
+              'UOM': '',
             }
           ]}
         />

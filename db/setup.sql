@@ -148,6 +148,12 @@ ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS witness_required;
 ALTER TABLE public.library_checklists DROP CONSTRAINT IF EXISTS library_checklists_reference_number_key;
 ALTER TABLE public.library_checklists DROP CONSTRAINT IF EXISTS library_checklists_name_key;
 DROP INDEX IF EXISTS public.library_checklists_reference_number_key;
+ALTER TABLE public.library_checklists ALTER COLUMN reference_number DROP NOT NULL;
+ALTER TABLE public.library_checklists ALTER COLUMN reference_number SET DEFAULT '';
+ALTER TABLE public.library_checklists ALTER COLUMN uom DROP NOT NULL;
+ALTER TABLE public.library_checklists ALTER COLUMN uom SET DEFAULT '';
+ALTER TABLE public.library_checklists ALTER COLUMN status DROP NOT NULL;
+ALTER TABLE public.library_checklists ALTER COLUMN status SET DEFAULT 'draft';
 
 DROP TABLE IF EXISTS public.checkpoints CASCADE;
 DROP TABLE IF EXISTS public.checklist_stages CASCADE;

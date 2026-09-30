@@ -91,5 +91,23 @@ export function parseDate(value: any): string | null {
 export function parseBoolean(value: any): boolean {
   if (typeof value === 'boolean') return value;
   const s = String(value ?? '').trim().toLowerCase();
-  return s === 'true' || s === 'yes' || s === 'y';
+  return s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 't' || s === 'required' || s === 'checked' || s === 'verified';
+}
+
+export function getField(row: ParsedRow, ...keys: string[]): any {
+  if (!row || typeof row !== 'object') return undefined;
+  for (const k of keys) {
+    if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
+      return row[k];
+    }
+  }
+  const rowKeys = Object.keys(row);
+  for (const k of keys) {
+    const cleanK = k.toLowerCase().replace(/[\s_\-–—]+/g, '');
+    const foundKey = rowKeys.find(rk => rk.toLowerCase().replace(/[\s_\-–—]+/g, '') === cleanK);
+    if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null && String(row[foundKey]).trim() !== '') {
+      return row[foundKey];
+    }
+  }
+  return undefined;
 }

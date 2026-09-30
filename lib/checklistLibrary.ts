@@ -21,12 +21,12 @@ export async function listLibraryChecklists(): Promise<(Checklist & { source: 'l
   }));
 }
 
-export async function createLibraryChecklist(name: string, referenceNumber: string): Promise<Checklist & { source: 'library' }> {
+export async function createLibraryChecklist(name: string, referenceNumber?: string): Promise<Checklist & { source: 'library' }> {
   const { rows } = await query(
     `INSERT INTO public.library_checklists (name, reference_number, status)
      VALUES ($1, $2, 'draft')
      RETURNING id, name, reference_number, uom, status, created_at`,
-    [name, referenceNumber]
+    [name, referenceNumber || '']
   );
   const row = rows[0];
   return {
