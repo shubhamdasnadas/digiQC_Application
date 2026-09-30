@@ -102,29 +102,35 @@ export async function POST(request: NextRequest) {
       if (templateId) {
         const detail = await getLibraryChecklistDetail(templateId);
         if (detail) {
-          for (const stage of detail.stages) {
-            const { rows: stageRows } = await orgQuery(payload.orgId!,
-              `INSERT INTO library_stages (library_checklist_id, sr_no, name, witness_required, drawing_required)
-               VALUES ($1, $2, $3, $4, $5)
-               RETURNING id`,
-              [checklistId, stage.sr_no || 1, stage.name, stage.witness_required || false, stage.drawing_required || false]
-            );
-            const stageId = stageRows[0].id;
-
-            const stageCheckpoints = detail.checkpoints.filter(cp => (cp as any).stage_id === stage.id || (cp as any).library_stage_id === stage.id);
-            for (const cp of stageCheckpoints) {
-              await orgQuery(payload.orgId!,
-                `INSERT INTO library_checkpoints (library_stage_id, sr_no, question, input_type, photo_required, remark_required)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
-                [
-                  stageId,
-                  cp.sr_no || 1,
-                  cp.question,
-                  cp.input_type || 'yes_no',
-                  (cp as any).photo_required || false,
-                  (cp as any).remark_required || false,
-                ]
+          const { rows: currStages } = await orgQuery(payload.orgId!,
+            `SELECT count(*)::int AS count FROM library_stages WHERE library_checklist_id = $1`,
+            [checklistId]
+          );
+          if (parseInt(currStages[0]?.count || '0') === 0) {
+            for (const stage of detail.stages) {
+              const { rows: stageRows } = await orgQuery(payload.orgId!,
+                `INSERT INTO library_stages (library_checklist_id, sr_no, name, witness_required, drawing_required)
+                 VALUES ($1, $2, $3, $4, $5)
+                 RETURNING id`,
+                [checklistId, stage.sr_no || 1, stage.name, stage.witness_required || false, stage.drawing_required || false]
               );
+              const stageId = stageRows[0].id;
+
+              const stageCheckpoints = detail.checkpoints.filter(cp => (cp as any).stage_id === stage.id || (cp as any).library_stage_id === stage.id);
+              for (const cp of stageCheckpoints) {
+                await orgQuery(payload.orgId!,
+                  `INSERT INTO library_checkpoints (library_stage_id, sr_no, question, input_type, photo_required, remark_required)
+                   VALUES ($1, $2, $3, $4, $5, $6)`,
+                  [
+                    stageId,
+                    cp.sr_no || 1,
+                    cp.question,
+                    cp.input_type || 'yes_no',
+                    (cp as any).photo_required || false,
+                    (cp as any).remark_required || false,
+                  ]
+                );
+              }
             }
           }
         }
