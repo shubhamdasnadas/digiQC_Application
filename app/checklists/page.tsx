@@ -50,8 +50,8 @@ export default function Checklists() {
           stage_name: sanitizeString(r['Stage Name'] || r.stage_name || ''),
           checkpoint: sanitizeString(r['Checkpoint'] || r.checkpoint || ''),
           input_type: yn.trim().toUpperCase() === 'TEXT' ? 'text' : 'yes_no',
-          drawing_required: parseBoolean(r['Photo'] ?? r.photo),
-          witness_required: parseBoolean(r['Remark'] ?? r.remark),
+          photo_required: parseBoolean(r['Photo'] ?? r.photo),
+          remark_required: parseBoolean(r['Remark'] ?? r.remark),
         };
       });
       const res = await fetch('/api/checklists', {

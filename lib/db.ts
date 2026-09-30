@@ -142,8 +142,6 @@ export async function ensurePublicSchemaTables() {
         sr_no integer NOT NULL DEFAULT 1,
         question text NOT NULL,
         input_type text NOT NULL DEFAULT 'yes_no',
-        drawing_required boolean DEFAULT false,
-        witness_required boolean DEFAULT false,
         photo_required boolean DEFAULT false,
         remark_required boolean DEFAULT false,
         created_at timestamptz DEFAULT now()
@@ -177,16 +175,14 @@ export async function ensurePublicSchemaTables() {
         END IF;
 
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'checkpoints') THEN
-          INSERT INTO public.library_checkpoints (id, library_stage_id, sr_no, question, input_type, drawing_required, witness_required, photo_required, remark_required, created_at)
-          SELECT cp.id, cp.stage_id, COALESCE(cp.sr_no, 1), cp.question, COALESCE(cp.input_type, 'yes_no'), COALESCE(cp.drawing_required, false), COALESCE(cp.witness_required, false), COALESCE(cp.photo_required, false), COALESCE(cp.remark_required, false), cp.created_at
+          INSERT INTO public.library_checkpoints (id, library_stage_id, sr_no, question, input_type, photo_required, remark_required, created_at)
+          SELECT cp.id, cp.stage_id, COALESCE(cp.sr_no, 1), cp.question, COALESCE(cp.input_type, 'yes_no'), COALESCE(cp.photo_required, false), COALESCE(cp.remark_required, false), cp.created_at
           FROM public.checkpoints cp
           WHERE EXISTS (SELECT 1 FROM public.library_stages ls WHERE ls.id = cp.stage_id)
           ON CONFLICT (id) DO UPDATE SET
             question = EXCLUDED.question,
             sr_no = EXCLUDED.sr_no,
             input_type = EXCLUDED.input_type,
-            drawing_required = EXCLUDED.drawing_required,
-            witness_required = EXCLUDED.witness_required,
             photo_required = EXCLUDED.photo_required,
             remark_required = EXCLUDED.remark_required;
         END IF;
@@ -215,11 +211,11 @@ export async function ensurePublicSchemaTables() {
       ALTER TABLE public.library_stages ADD COLUMN IF NOT EXISTS sr_no integer DEFAULT 1;
 
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS input_type text DEFAULT 'yes_no';
-      ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS drawing_required boolean DEFAULT false;
-      ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS witness_required boolean DEFAULT false;
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS photo_required boolean DEFAULT false;
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS remark_required boolean DEFAULT false;
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS sr_no integer DEFAULT 1;
+      ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS drawing_required;
+      ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS witness_required;
 
       ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS organization_id uuid;
       ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS name text;

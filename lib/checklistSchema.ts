@@ -31,8 +31,6 @@ export async function ensureChecklistSchema(_orgId?: string) {
         sr_no integer NOT NULL DEFAULT 1,
         question text NOT NULL,
         input_type text NOT NULL DEFAULT 'yes_no',
-        drawing_required boolean DEFAULT false,
-        witness_required boolean DEFAULT false,
         photo_required boolean DEFAULT false,
         remark_required boolean DEFAULT false,
         created_at timestamptz DEFAULT now()
@@ -51,11 +49,11 @@ export async function ensureChecklistSchema(_orgId?: string) {
       ALTER TABLE public.library_stages ADD COLUMN IF NOT EXISTS sr_no integer DEFAULT 1;
 
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS input_type text DEFAULT 'yes_no';
-      ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS drawing_required boolean DEFAULT false;
-      ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS witness_required boolean DEFAULT false;
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS photo_required boolean DEFAULT false;
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS remark_required boolean DEFAULT false;
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS sr_no integer DEFAULT 1;
+      ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS drawing_required;
+      ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS witness_required;
 
       -- Remove legacy tables
       DROP TABLE IF EXISTS public.checkpoints CASCADE;

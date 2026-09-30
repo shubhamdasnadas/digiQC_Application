@@ -19,8 +19,6 @@ const DEFAULT_FORM = {
     input_type: 'yes_no',
     photo_required: false,
     remark_required: false,
-    drawing_required: false,
-    witness_required: false,
     options: [
         { value: 'Yes', qc_fail: false },
         { value: 'No', qc_fail: true }
@@ -56,8 +54,6 @@ export default function CheckpointFormModal({
                     input_type: checkpoint.input_type || 'yes_no',
                     photo_required: !!(checkpoint as any).photo_required,
                     remark_required: !!(checkpoint as any).remark_required,
-                    drawing_required: !!checkpoint.drawing_required,
-                    witness_required: !!checkpoint.witness_required,
                     options: [
                         { value: 'Yes', qc_fail: false },
                         { value: 'No', qc_fail: true }
@@ -104,8 +100,6 @@ export default function CheckpointFormModal({
                     input_type: form.input_type,
                     photo_required: form.photo_required,
                     remark_required: form.remark_required,
-                    drawing_required: form.drawing_required,
-                    witness_required: form.witness_required,
                 }
                 : {
                     checklist_id: checklistId,
@@ -115,8 +109,6 @@ export default function CheckpointFormModal({
                     input_type: form.input_type,
                     photo_required: form.photo_required,
                     remark_required: form.remark_required,
-                    drawing_required: form.drawing_required,
-                    witness_required: form.witness_required,
                 };
 
             const res = await fetch(url, {

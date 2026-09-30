@@ -66,7 +66,7 @@ export async function getLibraryChecklistDetail(id: string): Promise<{
 
   const { rows: checkpoints } = await query(
     `SELECT lcp.id, lcp.library_stage_id AS stage_id, lcp.sr_no, lcp.question,
-            lcp.input_type, lcp.drawing_required, lcp.witness_required, lcp.photo_required, lcp.remark_required, lcp.created_at
+            lcp.input_type, lcp.photo_required, lcp.remark_required, lcp.created_at
      FROM public.library_checkpoints lcp
      JOIN public.library_stages ls ON lcp.library_stage_id = ls.id
      WHERE ls.library_checklist_id = $1

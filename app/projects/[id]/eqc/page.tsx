@@ -575,12 +575,12 @@ function AddEQCWizardModal({
       // If checklist has no checkpoints, provide standard quality checkpoints
       if (cpList.length === 0) {
         cpList = [
-          { id: 'cp-1', stage_id: stgList[0].id, sr_no: 1, question: 'Check reinforcement placement and concrete cover clearance', input_type: 'yes_no', drawing_required: false, witness_required: false, created_at: '' },
-          { id: 'cp-2', stage_id: stgList[0].id, sr_no: 2, question: 'Verify formwork alignment, plumbness, and structural stability', input_type: 'yes_no', drawing_required: false, witness_required: false, created_at: '' },
-          { id: 'cp-3', stage_id: stgList[0].id, sr_no: 3, question: 'Check cleanliness of pour area and removal of debris/slurry', input_type: 'yes_no', drawing_required: false, witness_required: false, created_at: '' },
-          { id: 'cp-4', stage_id: stgList[0].id, sr_no: 4, question: 'Confirm embedded conduits, boxes, and sleeve fixtures positioning', input_type: 'yes_no', drawing_required: false, witness_required: false, created_at: '' },
-          { id: 'cp-5', stage_id: stgList[0].id, sr_no: 5, question: 'Inspect dowel bars, lap lengths, and tie-wire anchoring', input_type: 'yes_no', drawing_required: false, witness_required: false, created_at: '' },
-          { id: 'cp-6', stage_id: stgList[0].id, sr_no: 6, question: 'Review safety barriers, working platforms, and access points', input_type: 'yes_no', drawing_required: false, witness_required: false, created_at: '' },
+          { id: 'cp-1', stage_id: stgList[0].id, sr_no: 1, question: 'Check reinforcement placement and concrete cover clearance', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-2', stage_id: stgList[0].id, sr_no: 2, question: 'Verify formwork alignment, plumbness, and structural stability', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-3', stage_id: stgList[0].id, sr_no: 3, question: 'Check cleanliness of pour area and removal of debris/slurry', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-4', stage_id: stgList[0].id, sr_no: 4, question: 'Confirm embedded conduits, boxes, and sleeve fixtures positioning', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-5', stage_id: stgList[0].id, sr_no: 5, question: 'Inspect dowel bars, lap lengths, and tie-wire anchoring', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-6', stage_id: stgList[0].id, sr_no: 6, question: 'Review safety barriers, working platforms, and access points', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
         ];
       }
 

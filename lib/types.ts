@@ -151,8 +151,6 @@ export interface Checkpoint {
   sr_no: number;
   question: string;
   input_type: 'yes_no' | 'numeric' | 'text' | 'options' | 'date';
-  drawing_required: boolean;
-  witness_required: boolean;
   photo_required?: boolean;
   remark_required?: boolean;
   created_at: string;
