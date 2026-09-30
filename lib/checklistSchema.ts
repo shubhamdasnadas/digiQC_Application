@@ -55,6 +55,11 @@ export async function ensureChecklistSchema(_orgId?: string) {
       ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS drawing_required;
       ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS witness_required;
 
+      -- Drop unique constraint on reference_number so multiple projects can share reference numbers or clone library checklists
+      ALTER TABLE public.library_checklists DROP CONSTRAINT IF EXISTS library_checklists_reference_number_key;
+      ALTER TABLE public.library_checklists DROP CONSTRAINT IF EXISTS library_checklists_name_key;
+      DROP INDEX IF EXISTS public.library_checklists_reference_number_key;
+
       -- Remove legacy tables
       DROP TABLE IF EXISTS public.checkpoints CASCADE;
       DROP TABLE IF EXISTS public.checklist_stages CASCADE;

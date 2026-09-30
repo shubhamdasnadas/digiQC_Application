@@ -217,6 +217,11 @@ export async function ensurePublicSchemaTables() {
       ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS drawing_required;
       ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS witness_required;
 
+      -- Drop unique constraint on reference_number so multiple projects can share reference numbers or clone library checklists
+      ALTER TABLE public.library_checklists DROP CONSTRAINT IF EXISTS library_checklists_reference_number_key;
+      ALTER TABLE public.library_checklists DROP CONSTRAINT IF EXISTS library_checklists_name_key;
+      DROP INDEX IF EXISTS public.library_checklists_reference_number_key;
+
       ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS organization_id uuid;
       ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS name text;
       ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS type text DEFAULT 'DEFAULT';
