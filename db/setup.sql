@@ -138,12 +138,13 @@ CREATE TABLE IF NOT EXISTS public.library_checkpoints (
   sr_no integer NOT NULL DEFAULT 1,
   question text NOT NULL,
   input_type text NOT NULL DEFAULT 'yes_no',
-  drawing_required boolean DEFAULT false,
-  witness_required boolean DEFAULT false,
   photo_required boolean DEFAULT false,
   remark_required boolean DEFAULT false,
   created_at timestamptz DEFAULT now()
 );
+
+ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS drawing_required;
+ALTER TABLE public.library_checkpoints DROP COLUMN IF EXISTS witness_required;
 
 DROP TABLE IF EXISTS public.checkpoints CASCADE;
 DROP TABLE IF EXISTS public.checklist_stages CASCADE;

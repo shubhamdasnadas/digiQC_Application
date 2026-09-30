@@ -17,8 +17,6 @@ export async function POST(request: NextRequest) {
             input_type,
             photo_required,
             remark_required,
-            drawing_required,
-            witness_required
         } = body;
 
         const effectiveQuestion = (question && String(question).trim()) || (name && String(name).trim());
@@ -50,18 +48,16 @@ export async function POST(request: NextRequest) {
         const nextSrNo = (parseInt(countRows[0]?.max_sr) || 0) + 1;
 
         const { rows } = await orgQuery(payload.orgId!,
-            `INSERT INTO library_checkpoints (library_stage_id, sr_no, question, input_type, photo_required, remark_required, drawing_required, witness_required)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             RETURNING id, library_stage_id AS stage_id, library_stage_id, sr_no, question, input_type, photo_required, remark_required, drawing_required, witness_required, created_at`,
+            `INSERT INTO library_checkpoints (library_stage_id, sr_no, question, input_type, photo_required, remark_required)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id, library_stage_id AS stage_id, library_stage_id, sr_no, question, input_type, photo_required, remark_required, created_at`,
             [
                 stage_id,
                 nextSrNo,
                 effectiveQuestion,
                 input_type || 'yes_no',
                 !!photo_required,
-                !!remark_required,
-                !!drawing_required,
-                !!witness_required
+                !!remark_required
             ]
         );
 
@@ -88,8 +84,6 @@ export async function PATCH(request: NextRequest) {
             input_type,
             photo_required,
             remark_required,
-            drawing_required,
-            witness_required,
             sr_no
         } = body;
 
@@ -111,18 +105,14 @@ export async function PATCH(request: NextRequest) {
                  input_type = COALESCE($2, input_type),
                  photo_required = COALESCE($3, photo_required),
                  remark_required = COALESCE($4, remark_required),
-                 drawing_required = COALESCE($5, drawing_required),
-                 witness_required = COALESCE($6, witness_required),
-                 sr_no = COALESCE($7, sr_no)
-             WHERE id = $8
-             RETURNING id, library_stage_id AS stage_id, library_stage_id, sr_no, question, input_type, photo_required, remark_required, drawing_required, witness_required, created_at`,
+                 sr_no = COALESCE($5, sr_no)
+             WHERE id = $6
+             RETURNING id, library_stage_id AS stage_id, library_stage_id, sr_no, question, input_type, photo_required, remark_required, created_at`,
             [
                 effectiveQuestion,
                 input_type !== undefined ? input_type : null,
                 photo_required !== undefined ? !!photo_required : null,
                 remark_required !== undefined ? !!remark_required : null,
-                drawing_required !== undefined ? !!drawing_required : null,
-                witness_required !== undefined ? !!witness_required : null,
                 sr_no !== undefined ? Number(sr_no) : null,
                 id
             ]

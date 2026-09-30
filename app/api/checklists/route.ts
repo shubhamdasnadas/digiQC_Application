@@ -114,15 +114,13 @@ export async function POST(request: NextRequest) {
             const stageCheckpoints = detail.checkpoints.filter(cp => (cp as any).stage_id === stage.id || (cp as any).library_stage_id === stage.id);
             for (const cp of stageCheckpoints) {
               await orgQuery(payload.orgId!,
-                `INSERT INTO library_checkpoints (library_stage_id, sr_no, question, input_type, drawing_required, witness_required, photo_required, remark_required)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                `INSERT INTO library_checkpoints (library_stage_id, sr_no, question, input_type, photo_required, remark_required)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
                 [
                   stageId,
                   cp.sr_no || 1,
                   cp.question,
                   cp.input_type || 'yes_no',
-                  cp.drawing_required || false,
-                  cp.witness_required || false,
                   (cp as any).photo_required || false,
                   (cp as any).remark_required || false,
                 ]
@@ -165,14 +163,12 @@ export async function POST(request: NextRequest) {
           const nextSrNo = parseInt(cpCount[0].count) + 1;
 
           await orgQuery(payload.orgId!,
-            `INSERT INTO library_checkpoints (library_stage_id, question, input_type, drawing_required, witness_required, photo_required, remark_required, sr_no)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            `INSERT INTO library_checkpoints (library_stage_id, question, input_type, photo_required, remark_required, sr_no)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
             [
               stageId,
               String(cpQuestion).trim(),
               row.input_type || 'yes_no',
-              !!row.drawing_required,
-              !!row.witness_required,
               !!row.photo_required,
               !!row.remark_required,
               nextSrNo

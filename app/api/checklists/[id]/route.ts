@@ -39,7 +39,7 @@ export async function GET(
         // Fetch all checkpoints for this checklist
         const { rows: checkpoints } = await orgQuery(payload.orgId!,
             `SELECT lcp.id, lcp.library_stage_id AS stage_id, lcp.library_stage_id, lcp.sr_no, lcp.question,
-                    lcp.input_type, lcp.drawing_required, lcp.witness_required, lcp.photo_required, lcp.remark_required, lcp.created_at
+                    lcp.input_type, lcp.photo_required, lcp.remark_required, lcp.created_at
              FROM library_checkpoints lcp
              JOIN library_stages ls ON lcp.library_stage_id = ls.id
              WHERE ls.library_checklist_id = $1
