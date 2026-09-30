@@ -10,11 +10,11 @@ export async function GET(request: NextRequest) {
     const [projectCount, checklistCount, teamCount, recentProjects, teams, checklists] =
       await Promise.all([
         orgQuery(payload.orgId!, 'SELECT COUNT(*) FROM projects'),
-        orgQuery(payload.orgId!, 'SELECT COUNT(*) FROM checklists'),
+        orgQuery(payload.orgId!, 'SELECT COUNT(*) FROM library_checklists'),
         orgQuery(payload.orgId!, 'SELECT COUNT(*) FROM teams'),
         orgQuery(payload.orgId!, 'SELECT * FROM projects ORDER BY created_at DESC LIMIT 5'),
         orgQuery(payload.orgId!, 'SELECT * FROM teams LIMIT 5'),
-        orgQuery(payload.orgId!, 'SELECT * FROM checklists LIMIT 5'),
+        orgQuery(payload.orgId!, 'SELECT * FROM library_checklists LIMIT 5'),
       ]);
 
     return NextResponse.json({

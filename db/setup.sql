@@ -109,24 +109,22 @@ CREATE INDEX IF NOT EXISTS projects_unique_code_idx
 ON public.projects (unique_code)
 WHERE unique_code IS NOT NULL;
 
--- Checklists
-CREATE TABLE IF NOT EXISTS public.checklists (
+-- Library Checklists (Canonical Checklists in public schema)
+CREATE TABLE IF NOT EXISTS public.library_checklists (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id uuid NOT NULL,
+  project_id uuid,
   name text NOT NULL,
   reference_number text,
-  uom text,
+  uom text DEFAULT '',
   status text DEFAULT 'draft',
+  updated_by uuid,
+  updated_at timestamptz DEFAULT now(),
   created_at timestamptz DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS checklists_project_ref_idx
-ON public.checklists (project_id, reference_number)
-WHERE reference_number IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS public.checklist_stages (
+CREATE TABLE IF NOT EXISTS public.library_stages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  checklist_id uuid NOT NULL,
+  library_checklist_id uuid NOT NULL REFERENCES public.library_checklists(id) ON DELETE CASCADE,
   sr_no integer NOT NULL DEFAULT 1,
   name text NOT NULL,
   witness_required boolean DEFAULT false,
@@ -134,18 +132,24 @@ CREATE TABLE IF NOT EXISTS public.checklist_stages (
   created_at timestamptz DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS public.checkpoints (
+CREATE TABLE IF NOT EXISTS public.library_checkpoints (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  stage_id uuid NOT NULL,
+  library_stage_id uuid NOT NULL REFERENCES public.library_stages(id) ON DELETE CASCADE,
+  sr_no integer NOT NULL DEFAULT 1,
   question text NOT NULL,
   input_type text NOT NULL DEFAULT 'yes_no',
   drawing_required boolean DEFAULT false,
   witness_required boolean DEFAULT false,
-  sr_no integer DEFAULT 0,
   photo_required boolean DEFAULT false,
   remark_required boolean DEFAULT false,
   created_at timestamptz DEFAULT now()
 );
+
+DROP TABLE IF EXISTS public.checkpoints CASCADE;
+DROP TABLE IF EXISTS public.checklist_stages CASCADE;
+DROP TABLE IF EXISTS public.checklists CASCADE;
+DROP TABLE IF EXISTS public.checklist CASCADE;
+DROP TABLE IF EXISTS public.eqc_items CASCADE;
 
 -- Super admins
 CREATE TABLE IF NOT EXISTS public.super_admins (

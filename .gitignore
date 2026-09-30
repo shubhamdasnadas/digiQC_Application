@@ -37,3 +37,6 @@ coverage/
 *.rar
 
 .vscode/
+
+package.json
+package-lock.json

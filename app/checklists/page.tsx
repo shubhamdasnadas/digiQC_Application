@@ -110,6 +110,7 @@ export default function Checklists() {
           reference_number: c.reference_number ? `${c.reference_number}-COPY` : null,
           uom: c.uom,
           project_id: c.project_id || null,
+          library_checklist_id: c.id,
         }),
       });
 

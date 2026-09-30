@@ -11,7 +11,6 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const {
-            checklist_id,
             stage_id,
             question,
             name,
@@ -30,56 +29,30 @@ export async function POST(request: NextRequest) {
 
         await ensureChecklistSchema(payload.orgId!);
 
-        // Ensure stage exists in checklist_stages (promote from library if needed)
-        let { rows: stageRows } = await orgQuery(payload.orgId!,
-            `SELECT cs.id, cs.checklist_id, c.project_id
-             FROM checklist_stages cs
-             LEFT JOIN checklists c ON c.id = cs.checklist_id
-             WHERE cs.id = $1`,
+        const { rows: stageRows } = await orgQuery(payload.orgId!,
+            `SELECT ls.id, ls.library_checklist_id, lc.project_id
+             FROM library_stages ls
+             LEFT JOIN library_checklists lc ON lc.id = ls.library_checklist_id
+             WHERE ls.id = $1`,
             [stage_id]
         );
 
         if (stageRows.length === 0) {
-            const { rows: libStageRows } = await orgQuery(payload.orgId!,
-                `SELECT ls.id, ls.library_checklist_id, ls.name, ls.sr_no, lc.name as checklist_name, lc.reference_number
-                 FROM library_stages ls
-                 JOIN library_checklists lc ON lc.id = ls.library_checklist_id
-                 WHERE ls.id = $1`,
-                [stage_id]
-            ).catch(() => ({ rows: [] }));
-
-            if (libStageRows.length > 0) {
-                const libStage = libStageRows[0];
-                await orgQuery(payload.orgId!,
-                    `INSERT INTO checklists (id, project_id, name, reference_number)
-                     VALUES ($1, NULL, $2, $3)
-                     ON CONFLICT (id) DO NOTHING`,
-                    [libStage.library_checklist_id, libStage.checklist_name, libStage.reference_number]
-                );
-                await orgQuery(payload.orgId!,
-                    `INSERT INTO checklist_stages (id, checklist_id, sr_no, name)
-                     VALUES ($1, $2, $3, $4)
-                     ON CONFLICT (id) DO NOTHING`,
-                    [libStage.id, libStage.library_checklist_id, libStage.sr_no || 1, libStage.name]
-                );
-                stageRows = [{ id: libStage.id, checklist_id: libStage.library_checklist_id, project_id: null }];
-            } else {
-                return NextResponse.json({ error: 'Stage not found.' }, { status: 404 });
-            }
+            return NextResponse.json({ error: 'Stage not found.' }, { status: 404 });
         }
 
         const projectId = stageRows[0]?.project_id;
 
         const { rows: countRows } = await orgQuery(payload.orgId!,
-            `SELECT COALESCE(MAX(sr_no), 0) AS max_sr FROM checkpoints WHERE stage_id = $1`,
+            `SELECT COALESCE(MAX(sr_no), 0) AS max_sr FROM library_checkpoints WHERE library_stage_id = $1`,
             [stage_id]
         );
         const nextSrNo = (parseInt(countRows[0]?.max_sr) || 0) + 1;
 
         const { rows } = await orgQuery(payload.orgId!,
-            `INSERT INTO checkpoints (stage_id, sr_no, question, input_type, photo_required, remark_required, drawing_required, witness_required)
+            `INSERT INTO library_checkpoints (library_stage_id, sr_no, question, input_type, photo_required, remark_required, drawing_required, witness_required)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             RETURNING *`,
+             RETURNING id, library_stage_id AS stage_id, library_stage_id, sr_no, question, input_type, photo_required, remark_required, drawing_required, witness_required, created_at`,
             [
                 stage_id,
                 nextSrNo,
@@ -133,7 +106,7 @@ export async function PATCH(request: NextRequest) {
                 : null;
 
         const { rows } = await orgQuery(payload.orgId!,
-            `UPDATE checkpoints
+            `UPDATE library_checkpoints
              SET question = COALESCE($1, question),
                  input_type = COALESCE($2, input_type),
                  photo_required = COALESCE($3, photo_required),
@@ -142,7 +115,7 @@ export async function PATCH(request: NextRequest) {
                  witness_required = COALESCE($6, witness_required),
                  sr_no = COALESCE($7, sr_no)
              WHERE id = $8
-             RETURNING *`,
+             RETURNING id, library_stage_id AS stage_id, library_stage_id, sr_no, question, input_type, photo_required, remark_required, drawing_required, witness_required, created_at`,
             [
                 effectiveQuestion,
                 input_type !== undefined ? input_type : null,
@@ -180,7 +153,7 @@ export async function DELETE(request: NextRequest) {
         await ensureChecklistSchema(payload.orgId!);
 
         const { rowCount } = await orgQuery(payload.orgId!,
-            `DELETE FROM checkpoints WHERE id = $1`,
+            `DELETE FROM library_checkpoints WHERE id = $1`,
             [id]
         );
 

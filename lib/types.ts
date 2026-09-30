@@ -136,6 +136,7 @@ export interface Checklist {
 export interface ChecklistStage {
   id: string;
   checklist_id: string;
+  library_checklist_id?: string;
   sr_no: number;
   name: string;
   witness_required?: boolean;
@@ -146,6 +147,7 @@ export interface ChecklistStage {
 export interface Checkpoint {
   id: string;
   stage_id: string;
+  library_stage_id?: string;
   sr_no: number;
   question: string;
   input_type: 'yes_no' | 'numeric' | 'text' | 'options' | 'date';
@@ -154,6 +156,17 @@ export interface Checkpoint {
   photo_required?: boolean;
   remark_required?: boolean;
   created_at: string;
+}
+
+export interface CheckpointResult {
+  checkpoint_id?: string;
+  sr_no: number;
+  question: string;
+  response: 'Yes' | 'No' | 'Skip' | string;
+  status?: 'pass' | 'fail' | 'skip';
+  remark?: string;
+  photos?: string[];
+  approver_comment?: string;
 }
 
 export interface EQC {
@@ -174,10 +187,22 @@ export interface EQC {
   assigned_user_ids: string[];
   assigned_team_ids: string[];
   created_at: string;
-  // joined
+  // joined & enhanced inspection fields
   checklist_name?: string;
+  checklist_uom?: string;
   inspector_name?: string;
+  inspector_display_name?: string;
+  inspector_team?: string;
   approver_name?: string;
+  maker_team?: string;
+  witness_types?: string[];
+  witness_photos?: string[];
+  drawing_photos?: string[];
+  inspection_data?: CheckpointResult[];
+  geo_tag?: string;
+  time_taken?: string;
+  completed_at?: string;
+  synced_at?: string;
 }
 
 export interface Issue {

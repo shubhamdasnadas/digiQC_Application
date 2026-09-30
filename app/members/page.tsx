@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Plus, X, Loader2, Upload, ChevronDown, FileDown, Download, Search, Edit2, MoreVertical } from 'lucide-react';
+import { Users, Plus, Loader2, Upload, ChevronDown, Download, Search, Edit2, MoreVertical } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
 import AddMemberModal from '@/components/AddMemberModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString } from '@/lib/excelImport';
-import { downloadSampleExcel } from '@/lib/excelTemplate';
 import { exportToXlsx } from '@/lib/excelExport';
 import type { Member, Organization } from '@/lib/types';
 
@@ -65,8 +64,10 @@ export default function Members() {
   };
 
   const filteredMembers = members.filter(m => {
-    const matchesSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          m.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = (searchTerm || '').trim().toLowerCase();
+    const name = (m?.name || '').toLowerCase();
+    const email = (m?.email || '').toLowerCase();
+    const matchesSearch = !q || name.includes(q) || email.includes(q);
     const matchesAccess = filterAccessType === 'All' || m.access_type === filterAccessType;
     const matchesTeam = filterTeam === 'All' || (m.teams || '').includes(filterTeam);
     return matchesSearch && matchesAccess && matchesTeam;

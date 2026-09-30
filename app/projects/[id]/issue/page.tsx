@@ -57,14 +57,16 @@ export default function IssueTab() {
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id, search]);
 
   const filteredIssues = issues.filter(issue => {
-    const matchesSearch = issue.title.toLowerCase().includes(search.toLowerCase()) ||
-      issue.description.toLowerCase().includes(search.toLowerCase());
+    const q = (search || '').trim().toLowerCase();
+    const title = (issue?.title || '').toLowerCase();
+    const desc = (issue?.description || '').toLowerCase();
+    const matchesSearch = !q || title.includes(q) || desc.includes(q);
 
     if (isOverdueFilter) {
-      if (!issue.due_date) return false;
+      if (!issue?.due_date) return false;
       const dueDate = new Date(issue.due_date);
       const now = new Date();
-      return dueDate < now && issue.status !== 'closed' && issue.status !== 'resolved';
+      return matchesSearch && dueDate < now && issue.status !== 'closed' && issue.status !== 'resolved';
     }
 
     return matchesSearch;
