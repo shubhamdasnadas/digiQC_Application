@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
 
     let queryText = `
       SELECT c.*,
+        COALESCE(u.name, m.name, c.updated_by, 'Admin') AS updated_by,
         CASE WHEN p.id IS NOT NULL
           THEN json_build_object('id', p.id, 'name', p.name)
           ELSE NULL
@@ -25,6 +26,8 @@ export async function GET(request: NextRequest) {
         (SELECT COUNT(*)::int FROM library_checkpoints lcp JOIN library_stages ls ON lcp.library_stage_id = ls.id WHERE ls.library_checklist_id = c.id) AS checkpoint_count
       FROM library_checklists c
       LEFT JOIN projects p ON c.project_id = p.id
+      LEFT JOIN users u ON c.updated_by::text = u.id::text
+      LEFT JOIN members m ON c.updated_by::text = m.id::text
     `;
     const params: any[] = [];
 
@@ -33,7 +36,7 @@ export async function GET(request: NextRequest) {
       queryText += ` WHERE c.project_id = $1`;
     }
 
-    queryText += ` ORDER BY c.created_at DESC`;
+    queryText += ` ORDER BY c.created_at DESC, c.updated_at DESC`;
 
     const { rows } = await orgQuery(payload.orgId!, queryText, params);
     return NextResponse.json(rows);
@@ -63,34 +66,62 @@ export async function POST(request: NextRequest) {
 
       let checklistId: string;
 
-      // Check if matching checklist already exists for this project
+      // Check if matching checklist already exists
       let existingRows: any[] = [];
-      if (projectId && refNum) {
-        const res = await orgQuery(payload.orgId!,
-          `SELECT id FROM library_checklists WHERE project_id = $1 AND reference_number = $2`,
-          [projectId, refNum]
-        );
-        existingRows = res.rows;
-      } else if (projectId) {
-        const res = await orgQuery(payload.orgId!,
-          `SELECT id FROM library_checklists WHERE project_id = $1 AND name = $2`,
-          [projectId, row.name.trim()]
-        );
-        existingRows = res.rows;
+      if (projectId) {
+        if (refNum) {
+          const res = await orgQuery(payload.orgId!,
+            `SELECT id, name, reference_number, uom FROM library_checklists WHERE project_id = $1 AND reference_number = $2`,
+            [projectId, refNum]
+          );
+          existingRows = res.rows;
+        }
+        if (existingRows.length === 0) {
+          const res = await orgQuery(payload.orgId!,
+            `SELECT id, name, reference_number, uom FROM library_checklists WHERE project_id = $1 AND name = $2`,
+            [projectId, row.name.trim()]
+          );
+          existingRows = res.rows;
+        }
+      } else {
+        // Global / Library checklist (project_id IS NULL)
+        if (refNum) {
+          const res = await orgQuery(payload.orgId!,
+            `SELECT id, name, reference_number, uom FROM library_checklists WHERE project_id IS NULL AND reference_number = $1`,
+            [refNum]
+          );
+          existingRows = res.rows;
+        }
+        if (existingRows.length === 0) {
+          const res = await orgQuery(payload.orgId!,
+            `SELECT id, name, reference_number, uom FROM library_checklists WHERE project_id IS NULL AND name = $1`,
+            [row.name.trim()]
+          );
+          existingRows = res.rows;
+        }
       }
 
       if (existingRows.length > 0) {
         checklistId = existingRows[0].id;
+        const updatedRefNum = refNum || (existingRows[0]?.reference_number ?? '');
+        const updatedUom = uom || (existingRows[0]?.uom ?? '');
         await orgQuery(payload.orgId!,
-          `UPDATE library_checklists SET name = $1, uom = COALESCE($2, uom), reference_number = COALESCE($3, reference_number), updated_at = NOW() WHERE id = $4`,
-          [row.name.trim(), uom, refNum, checklistId]
+          `UPDATE library_checklists
+           SET name = $1,
+               uom = $2,
+               reference_number = $3,
+               updated_by = $4,
+               updated_at = NOW(),
+               created_at = COALESCE(created_at, NOW())
+           WHERE id = $5`,
+          [row.name.trim(), updatedUom, updatedRefNum, payload.userId || null, checklistId]
         );
       } else {
         const { rows: clRows } = await orgQuery(payload.orgId!,
-          `INSERT INTO library_checklists (project_id, name, reference_number, uom, status)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO library_checklists (project_id, name, reference_number, uom, status, updated_by, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
            RETURNING id`,
-          [projectId, row.name.trim(), refNum, uom, status]
+          [projectId, row.name.trim(), refNum || '', uom, status, payload.userId || null]
         );
         checklistId = clRows[0].id;
       }
@@ -137,8 +168,8 @@ export async function POST(request: NextRequest) {
       }
 
       // Handle Stage if specified (e.g. on excel import)
-      if (row.stage_name && String(row.stage_name).trim()) {
-        const stageName = String(row.stage_name).trim();
+      const stageName = row.stage_name && String(row.stage_name).trim() ? String(row.stage_name).trim() : (row.checkpoint || row.question ? 'Single Stage' : null);
+      if (stageName) {
         const { rows: existingStages } = await orgQuery(payload.orgId!,
           `SELECT id FROM library_stages WHERE library_checklist_id = $1 AND name = $2`,
           [checklistId, stageName]
@@ -149,12 +180,12 @@ export async function POST(request: NextRequest) {
           stageId = existingStages[0].id;
         } else {
           const { rows: countRows } = await orgQuery(payload.orgId!,
-            `SELECT count(*) AS count FROM library_stages WHERE library_checklist_id = $1`, [checklistId]);
-          const nextSrNo = parseInt(countRows[0].count) + 1;
+            `SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr_no FROM library_stages WHERE library_checklist_id = $1`, [checklistId]);
+          const nextSrNo = parseInt(countRows[0].next_sr_no);
 
           const { rows: stageRows } = await orgQuery(payload.orgId!,
-            `INSERT INTO library_stages (library_checklist_id, sr_no, name, witness_required, drawing_required)
-             VALUES ($1, $2, $3, $4, $5)
+            `INSERT INTO library_stages (library_checklist_id, sr_no, name, witness_required, drawing_required, created_at)
+             VALUES ($1, $2, $3, $4, $5, NOW())
              RETURNING id`,
             [checklistId, nextSrNo, stageName, !!row.witness_required, !!row.drawing_required]
           );
@@ -164,22 +195,38 @@ export async function POST(request: NextRequest) {
         // Handle Checkpoint if specified
         const cpQuestion = row.checkpoint || row.question;
         if (cpQuestion && String(cpQuestion).trim()) {
-          const { rows: cpCount } = await orgQuery(payload.orgId!,
-            `SELECT count(*) AS count FROM library_checkpoints WHERE library_stage_id = $1`, [stageId]);
-          const nextSrNo = parseInt(cpCount[0].count) + 1;
-
-          await orgQuery(payload.orgId!,
-            `INSERT INTO library_checkpoints (library_stage_id, question, input_type, photo_required, remark_required, sr_no)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              stageId,
-              String(cpQuestion).trim(),
-              row.input_type || 'yes_no',
-              !!row.photo_required,
-              !!row.remark_required,
-              nextSrNo
-            ]
+          const qText = String(cpQuestion).trim();
+          const { rows: existingCp } = await orgQuery(payload.orgId!,
+            `SELECT id FROM library_checkpoints
+             WHERE library_stage_id = $1 AND (TRIM(question) = TRIM($2) OR LOWER(TRIM(question)) = LOWER(TRIM($2)))`,
+            [stageId, qText]
           );
+
+          if (existingCp.length > 0) {
+            await orgQuery(payload.orgId!,
+              `UPDATE library_checkpoints
+               SET question = $1, input_type = $2, photo_required = $3, remark_required = $4
+               WHERE id = $5`,
+              [qText, row.input_type || 'yes_no', !!row.photo_required, !!row.remark_required, existingCp[0].id]
+            );
+          } else {
+            const { rows: cpCount } = await orgQuery(payload.orgId!,
+              `SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr_no FROM library_checkpoints WHERE library_stage_id = $1`, [stageId]);
+            const nextSrNo = parseInt(cpCount[0].next_sr_no);
+
+            await orgQuery(payload.orgId!,
+              `INSERT INTO library_checkpoints (library_stage_id, question, input_type, photo_required, remark_required, sr_no, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [
+                stageId,
+                qText,
+                row.input_type || 'yes_no',
+                !!row.photo_required,
+                !!row.remark_required,
+                nextSrNo
+              ]
+            );
+          }
         }
       }
     }

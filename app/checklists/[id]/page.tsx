@@ -171,6 +171,22 @@ export default function ChecklistDetail() {
         }
     };
 
+    const handleToggleCheckpointRequirement = async (cp: Checkpoint, field: 'photo_required' | 'remark_required', currentVal: boolean) => {
+        const newVal = !currentVal;
+        setCheckpoints(prev => prev.map(c => c.id === cp.id ? { ...c, [field]: newVal } : c));
+        try {
+            const res = await fetch('/api/checklists/checkpoints', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: cp.id, [field]: newVal }),
+            });
+            if (!res.ok) throw new Error('Failed to update checkpoint');
+        } catch (err) {
+            console.error('Error toggling checkpoint requirement:', err);
+            setCheckpoints(prev => prev.map(c => c.id === cp.id ? { ...c, [field]: currentVal } : c));
+        }
+    };
+
     // Native Drag and Drop Handlers for Stages
     const [draggedStageIdx, setDraggedStageIdx] = useState<number | null>(null);
 
@@ -402,22 +418,32 @@ export default function ChecklistDetail() {
                                                     {cp.input_type === 'yes_no' ? 'Yes / No' : cp.input_type}
                                                 </td>
                                                 <td className="py-4">
-                                                    <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleCheckpointRequirement(cp, 'photo_required', !!(cp as any).photo_required)}
+                                                        className="flex items-center gap-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                                                        title={`Photo is ${(cp as any).photo_required ? 'Required (Click to disable)' : 'Not Required (Click to enable)'}`}
+                                                    >
                                                         {(cp as any).photo_required ? (
                                                             <CheckCircle2 size={16} className="text-green-500" />
                                                         ) : (
-                                                            <XCircle size={16} className="text-gray-300 dark:text-gray-600" />
+                                                            <XCircle size={16} className="text-red-500" />
                                                         )}
-                                                    </div>
+                                                    </button>
                                                 </td>
                                                 <td className="py-4">
-                                                    <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleCheckpointRequirement(cp, 'remark_required', !!(cp as any).remark_required)}
+                                                        className="flex items-center gap-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                                                        title={`Remark is ${(cp as any).remark_required ? 'Required (Click to disable)' : 'Not Required (Click to enable)'}`}
+                                                    >
                                                         {(cp as any).remark_required ? (
                                                             <CheckCircle2 size={16} className="text-green-500" />
                                                         ) : (
-                                                            <XCircle size={16} className="text-gray-300 dark:text-gray-600" />
+                                                            <XCircle size={16} className="text-red-500" />
                                                         )}
-                                                    </div>
+                                                    </button>
                                                 </td>
                                                 <td className="py-4">
                                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

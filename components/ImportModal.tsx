@@ -8,11 +8,19 @@ interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  description: string;
+  description?: string;
+  columns?: string[];
+  sampleData?: any[];
   onImport: (data: ParsedRow[]) => Promise<ImportResult>;
 }
 
-export default function ImportModal({ isOpen, onClose, title, description, onImport }: ImportModalProps) {
+export default function ImportModal({
+  isOpen,
+  onClose,
+  title,
+  description = 'Upload an Excel file (.xlsx, .xls) or CSV to import data.',
+  onImport
+}: ImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
