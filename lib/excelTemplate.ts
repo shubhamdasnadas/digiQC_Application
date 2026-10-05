@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx-js-style';
 
-export function downloadSampleExcel(dataType: 'projects' | 'teams' | 'organizations' | 'checklists') {
+export function downloadSampleExcel(dataType: 'projects' | 'teams' | 'organizations' | 'checklists' | 'members') {
   const templates: Record<typeof dataType, Record<string, any>[]> = {
     projects: [
       {
@@ -83,6 +83,41 @@ export function downloadSampleExcel(dataType: 'projects' | 'teams' | 'organizati
         'Type': 'TEXT',
         'Photo': 'FALSE',
         'Remark': 'TRUE',
+      },
+    ],
+    members: [
+      {
+        'Name': 'Karan Shah',
+        'Email': 'parshwaconstructions2020@gmail.com',
+        'Phone No': '9821322140',
+        'Access Type': 'Complimentary',
+        'Active': 'Yes',
+        'Default Role': 'User',
+        'Team': 'Parshwa Constructions',
+        'Active Assigned Projects': 'CITIZEN CHSL',
+        'Inactive Assigned Projects': '',
+      },
+      {
+        'Name': 'Mayuresh Jadhav',
+        'Email': 'mayuresh.jadhav@pranavconstructions.com',
+        'Phone No': '+919769874571',
+        'Access Type': 'Paid',
+        'Active': 'Yes',
+        'Default Role': 'User',
+        'Team': 'Main Team, Phone Contact',
+        'Active Assigned Projects': 'AURORA, Training Project, SHINING STAR, ANKUR, MAYUR RESIDENCY, NIRMAL BHAVAN CHSL',
+        'Inactive Assigned Projects': '',
+      },
+      {
+        'Name': 'Vishal Tatte',
+        'Email': 'vishal.tatte@pranavconstructions.com',
+        'Phone No': '+919595530660',
+        'Access Type': 'Paid',
+        'Active': 'Yes',
+        'Default Role': 'User',
+        'Team': 'Main Team',
+        'Active Assigned Projects': 'Training Project, YOU AND I, VAIBHAV VISTA',
+        'Inactive Assigned Projects': '',
       },
     ],
   };

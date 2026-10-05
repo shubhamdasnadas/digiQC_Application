@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS public.teams (
   spoc_name text DEFAULT '',
   active_projects text DEFAULT '',
   inactive_projects text DEFAULT '',
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
 );
 
 -- Members
@@ -69,13 +70,14 @@ CREATE TABLE IF NOT EXISTS public.members (
   name text NOT NULL,
   email text DEFAULT '',
   phone text DEFAULT '',
-  access_type text DEFAULT '',
+  access_type text DEFAULT 'Paid',
   active boolean DEFAULT true,
-  default_role text DEFAULT '',
+  default_role text DEFAULT 'User',
   teams text DEFAULT '',
   active_projects text DEFAULT '',
   inactive_projects text DEFAULT '',
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
 );
 
 -- Projects

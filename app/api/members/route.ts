@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
+import { ensureMemberSchema } from '@/lib/memberSchema';
 
 export async function GET(request: NextRequest) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
+
+  await ensureMemberSchema();
 
   try {
     const { rows } = await orgQuery(payload.orgId!, 'SELECT * FROM members ORDER BY created_at DESC');
@@ -18,6 +21,8 @@ export async function PUT(request: NextRequest) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
 
+  await ensureMemberSchema();
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -26,17 +31,50 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    
+
+    const { rows: existingRows } = await orgQuery(payload.orgId!,
+      `SELECT * FROM members WHERE id = $1`,
+      [id]
+    );
+
+    if (existingRows.length === 0) {
+      return NextResponse.json({ error: 'Member not found' }, { status: 404 });
+    }
+
+    const existing = existingRows[0];
+    const name = body.name ? String(body.name).trim() : existing.name;
+    const email = body.email !== undefined ? String(body.email).trim() : existing.email;
+    const phone = body.phone !== undefined ? String(body.phone).trim() : existing.phone;
+    const defaultRole = body.default_role !== undefined ? String(body.default_role).trim() : (body.role !== undefined ? String(body.role).trim() : existing.default_role);
+    const teams = body.teams !== undefined ? String(body.teams).trim() : existing.teams;
+    const accessType = body.access_type !== undefined ? String(body.access_type).trim() : existing.access_type;
+    const active = body.active !== undefined ? !!body.active : existing.active;
+    const activeProjects = body.active_projects !== undefined ? String(body.active_projects).trim() : existing.active_projects;
+    const inactiveProjects = body.inactive_projects !== undefined ? String(body.inactive_projects).trim() : existing.inactive_projects;
+
     await orgQuery(payload.orgId!,
       `UPDATE members
-       SET name = $1, email = $2, phone = $3, default_role = $4, teams = $5
-       WHERE id = $6`,
+       SET name = $1,
+           email = $2,
+           phone = $3,
+           default_role = $4,
+           teams = $5,
+           access_type = $6,
+           active = $7,
+           active_projects = $8,
+           inactive_projects = $9,
+           updated_at = NOW()
+       WHERE id = $10`,
       [
-        body.name,
-        body.email ?? '',
-        body.phone ?? '',
-        body.default_role ?? '',
-        body.teams ?? '',
+        name,
+        email,
+        phone,
+        defaultRole,
+        teams,
+        accessType,
+        active,
+        activeProjects,
+        inactiveProjects,
         id
       ]
     );
@@ -51,6 +89,8 @@ export async function POST(request: NextRequest) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
 
+  await ensureMemberSchema();
+
   try {
     const body = await request.json();
     const rows = body.rows ?? [body];
@@ -60,23 +100,131 @@ export async function POST(request: NextRequest) {
     }
 
     for (const row of rows) {
-      await orgQuery(payload.orgId!,
-        `INSERT INTO members (organization_id, name, email, phone, access_type, active, default_role, teams, active_projects, inactive_projects)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [
-          payload.orgId,
-          row.name,
-          row.email ?? '',
-          row.phone ?? '',
-          row.access_type ?? '',
-          row.active ?? true,
-          row.default_role ?? '',
-          row.teams ?? '',
-          row.active_projects ?? '',
-          row.inactive_projects ?? '',
-        ]
-      );
+      if (!row.name || !String(row.name).trim()) continue;
+
+      const name = String(row.name).trim();
+      const email = row.email ? String(row.email).trim() : '';
+      const phone = row.phone ? String(row.phone).trim() : '';
+      const accessType = row.access_type ? String(row.access_type).trim() : 'Paid';
+      const active = row.active !== undefined ? !!row.active : true;
+      const defaultRole = row.default_role ? String(row.default_role).trim() : 'User';
+      const teams = row.teams ? String(row.teams).trim() : '';
+      const activeProjects = row.active_projects ? String(row.active_projects).trim() : '';
+      const inactiveProjects = row.inactive_projects ? String(row.inactive_projects).trim() : '';
+
+      // Check if member already exists (match by email, then phone, then name)
+      let existingRows: any[] = [];
+      if (email) {
+        const res = await orgQuery(payload.orgId!,
+          `SELECT id, name, email, phone, access_type, active, default_role, teams, active_projects, inactive_projects
+           FROM members
+           WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))`,
+          [email]
+        );
+        existingRows = res.rows;
+      }
+
+      if (existingRows.length === 0 && phone) {
+        const cleanPhone = phone.replace(/\s+/g, '');
+        const res = await orgQuery(payload.orgId!,
+          `SELECT id, name, email, phone, access_type, active, default_role, teams, active_projects, inactive_projects
+           FROM members
+           WHERE TRIM(phone) = TRIM($1) OR REPLACE(TRIM(phone), ' ', '') = $2`,
+          [phone, cleanPhone]
+        );
+        existingRows = res.rows;
+      }
+
+      if (existingRows.length === 0 && name) {
+        const res = await orgQuery(payload.orgId!,
+          `SELECT id, name, email, phone, access_type, active, default_role, teams, active_projects, inactive_projects
+           FROM members
+           WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))`,
+          [name]
+        );
+        existingRows = res.rows;
+      }
+
+      if (existingRows.length > 0) {
+        // Only update the existing member record without inserting duplicate
+        const existing = existingRows[0];
+        const updatedEmail = email || existing.email || '';
+        const updatedPhone = phone || existing.phone || '';
+        const updatedAccessType = accessType || existing.access_type || 'Paid';
+        const updatedRole = defaultRole || existing.default_role || 'User';
+        const updatedTeams = teams || existing.teams || '';
+        const updatedActiveProjects = activeProjects || existing.active_projects || '';
+        const updatedInactiveProjects = inactiveProjects || existing.inactive_projects || '';
+
+        await orgQuery(payload.orgId!,
+          `UPDATE members
+           SET name = $1,
+               email = $2,
+               phone = $3,
+               access_type = $4,
+               active = $5,
+               default_role = $6,
+               teams = $7,
+               active_projects = $8,
+               inactive_projects = $9,
+               updated_at = NOW()
+           WHERE id = $10`,
+          [
+            name,
+            updatedEmail,
+            updatedPhone,
+            updatedAccessType,
+            active,
+            updatedRole,
+            updatedTeams,
+            updatedActiveProjects,
+            updatedInactiveProjects,
+            existing.id
+          ]
+        );
+      } else {
+        // Insert new member
+        await orgQuery(payload.orgId!,
+          `INSERT INTO members (
+             organization_id, name, email, phone, access_type, active,
+             default_role, teams, active_projects, inactive_projects,
+             created_at, updated_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+          [
+            payload.orgId,
+            name,
+            email,
+            phone,
+            accessType,
+            active,
+            defaultRole,
+            teams,
+            activeProjects,
+            inactiveProjects,
+          ]
+        );
+      }
+
+      // Automatically register any referenced teams in the teams table if not already present
+      if (teams) {
+        const teamNames = teams.split(',').map((t: string) => t.trim()).filter(Boolean);
+        for (const tName of teamNames) {
+          const { rows: existingTeam } = await orgQuery(payload.orgId!,
+            `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))`,
+            [tName]
+          );
+          if (existingTeam.length === 0) {
+            await orgQuery(payload.orgId!,
+              `INSERT INTO teams (organization_id, name, type, active_projects, inactive_projects, created_at, updated_at)
+               VALUES ($1, $2, 'inspection', $3, $4, NOW(), NOW())`,
+              [payload.orgId, tName, activeProjects, inactiveProjects]
+            );
+          }
+        }
+      }
     }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
@@ -87,8 +235,17 @@ export async function DELETE(request: NextRequest) {
   const { payload, response } = requireAuth(request);
   if (!payload) return response;
 
+  await ensureMemberSchema();
+
   try {
-    await orgQuery(payload.orgId!, 'DELETE FROM members');
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (id) {
+      await orgQuery(payload.orgId!, 'DELETE FROM members WHERE id = $1', [id]);
+    } else {
+      await orgQuery(payload.orgId!, 'DELETE FROM members');
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

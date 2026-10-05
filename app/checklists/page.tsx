@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ClipboardList, Plus, X, Loader2, Upload, ChevronDown, FileDown, Edit2, Copy, Trash2 } from 'lucide-react';
+import { ClipboardList, Plus, X, Loader2, Upload, ChevronDown, FileDown, Edit2, Copy, Trash2, Download } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
 import EditChecklistModal from '@/components/EditChecklistModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString, parseBoolean, getField } from '@/lib/excelImport';
+import { exportToXlsx } from '@/lib/excelExport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import type { Checklist, Project } from '@/lib/types';
 
@@ -14,6 +15,7 @@ export default function Checklists() {
   const [checklists, setChecklists] = useState<(Checklist & { project?: { name: string } })[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showTable, setShowTable] = useState(true);
@@ -174,14 +176,48 @@ export default function Checklists() {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const res = await fetch('/api/checklists?export=true');
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows) && rows.length > 0) {
+          exportToXlsx(rows, 'valid8-checklists');
+          return;
+        }
+      }
+      // Fallback to table metadata export if detailed query is empty
+      const fallbackRows = checklists.map(c => ({
+        'Checklist Name': c.name,
+        'REFERENCE NUMBER': c.reference_number || '',
+        'UOM': c.uom || '',
+        'Status': c.status === 'live' ? 'Live' : 'Draft',
+        'Updated By': c.updated_by || 'Admin',
+        'Updated At': c.updated_at ? new Date(c.updated_at).toLocaleString('en-IN') : new Date(c.created_at).toLocaleString('en-IN'),
+      }));
+      if (fallbackRows.length > 0) {
+        exportToXlsx(fallbackRows, 'valid8-checklists');
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Failed to export checklists.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="p-6 animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <p className="text-sm text-gray-500 dark:text-gray-400">{checklists.length} checklists</p>
         <div className="flex items-center gap-2">
-          <button onClick={() => downloadSampleExcel('checklists')} className="btn-secondary"><FileDown size={15} /> Template</button>
-          <button onClick={() => setShowImport(true)} className="btn-secondary"><Upload size={15} /> Import</button>
-          <button onClick={() => setShowAdd(true)} className="btn-primary"><Plus size={15} /> Add Checklist</button>
+          <button onClick={() => downloadSampleExcel('checklists')} className="btn-secondary flex items-center gap-1.5"><FileDown size={15} /> Template</button>
+          <button onClick={() => setShowImport(true)} className="btn-secondary flex items-center gap-1.5"><Upload size={15} /> Import</button>
+          <button onClick={handleExport} disabled={exporting || checklists.length === 0} className="btn-secondary flex items-center gap-1.5">
+            {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Export
+          </button>
+          <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-1.5"><Plus size={15} /> Add Checklist</button>
         </div>
       </div>
 

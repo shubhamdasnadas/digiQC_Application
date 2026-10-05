@@ -67,7 +67,8 @@ export async function ensurePublicSchemaTables() {
         spoc_name text DEFAULT '',
         active_projects text DEFAULT '',
         inactive_projects text DEFAULT '',
-        created_at timestamptz DEFAULT now()
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now()
       );
 
       -- Members in public schema
@@ -83,7 +84,8 @@ export async function ensurePublicSchemaTables() {
         teams text DEFAULT '',
         active_projects text DEFAULT '',
         inactive_projects text DEFAULT '',
-        created_at timestamptz DEFAULT now()
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now()
       );
 
       -- Projects in public schema
@@ -236,6 +238,7 @@ export async function ensurePublicSchemaTables() {
       ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS active_projects text DEFAULT '';
       ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS inactive_projects text DEFAULT '';
       ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+      ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS organization_id uuid;
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS name text;
@@ -248,6 +251,7 @@ export async function ensurePublicSchemaTables() {
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS active_projects text DEFAULT '';
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS inactive_projects text DEFAULT '';
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+      ALTER TABLE public.members ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS maker_team text DEFAULT '';
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS witness_types text[] DEFAULT '{}';

@@ -14,6 +14,45 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('project_id');
+    const isExport = searchParams.get('export') === 'true';
+
+    if (isExport) {
+      let exportQuery = `
+        SELECT
+          c.name AS "Checklist Name",
+          COALESCE(c.reference_number, '') AS "REFERENCE NUMBER",
+          COALESCE(ls.name, 'Single Stage') AS "Stage Name",
+          COALESCE(lcp.question, '') AS "Checkpoint",
+          CASE
+            WHEN lcp.input_type = 'yes_no' THEN 'Y/N'
+            WHEN lcp.input_type = 'text' THEN 'TEXT'
+            WHEN lcp.input_type = 'numeric' THEN 'NUMERIC'
+            WHEN lcp.input_type = 'options' THEN 'OPTIONS'
+            WHEN lcp.input_type = 'date' THEN 'DATE'
+            ELSE 'Y/N'
+          END AS "Type",
+          CASE WHEN lcp.photo_required IS TRUE THEN 'TRUE' ELSE 'FALSE' END AS "Photo",
+          CASE WHEN lcp.remark_required IS TRUE THEN 'TRUE' ELSE 'FALSE' END AS "Remark",
+          COALESCE(c.uom, '') AS "UOM",
+          COALESCE(c.status, 'draft') AS "Status",
+          COALESCE(u.name, m.name, c.updated_by, 'Admin') AS "Updated By",
+          COALESCE(c.updated_at, c.created_at) AS "Updated At"
+        FROM library_checklists c
+        LEFT JOIN projects p ON c.project_id = p.id
+        LEFT JOIN library_stages ls ON ls.library_checklist_id = c.id
+        LEFT JOIN library_checkpoints lcp ON lcp.library_stage_id = ls.id
+        LEFT JOIN users u ON c.updated_by::text = u.id::text
+        LEFT JOIN members m ON c.updated_by::text = m.id::text
+      `;
+      const exportParams: any[] = [];
+      if (projectId) {
+        exportParams.push(projectId);
+        exportQuery += ` WHERE c.project_id = $1`;
+      }
+      exportQuery += ` ORDER BY c.created_at DESC, ls.sr_no ASC, lcp.sr_no ASC`;
+      const { rows: exportRows } = await orgQuery(payload.orgId!, exportQuery, exportParams);
+      return NextResponse.json(exportRows);
+    }
 
     let queryText = `
       SELECT c.*,

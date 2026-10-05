@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Plus, X, Loader2, Search, Pencil, Trash2 } from 'lucide-react';
+import { Plus, X, Loader2, Search, Pencil, Trash2, Download } from 'lucide-react';
 import TabsPageShell from '@/components/TabsPageShell';
 import DataTable, { type Column } from '@/components/DataTable';
+import { exportToXlsx } from '@/lib/excelExport';
 import type { Checklist } from '@/lib/types';
 
 export default function ChecklistsTab() {
@@ -88,10 +89,46 @@ export default function ChecklistsTab() {
     },
   ];
 
+  const handleExport = async () => {
+    try {
+      const res = await fetch(`/api/checklists?project_id=${id}&export=true`);
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows) && rows.length > 0) {
+          exportToXlsx(rows, `project-${id}-checklists`);
+          return;
+        }
+      }
+      const fallbackRows = checklists.map(c => ({
+        'Checklist Name': c.name,
+        'REFERENCE NUMBER': c.reference_number || '',
+        'UOM': c.uom || '',
+        'Status': c.status === 'live' ? 'Live' : 'Draft',
+        'Updated By': (c as any).updated_by || 'Admin',
+        'Updated At': c.updated_at ? new Date(c.updated_at).toLocaleString('en-IN') : new Date(c.created_at).toLocaleString('en-IN'),
+      }));
+      if (fallbackRows.length > 0) {
+        exportToXlsx(fallbackRows, `project-${id}-checklists`);
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Failed to export checklists.');
+    }
+  };
+
   return (
     <TabsPageShell
       title="Checklists"
       description="Quality checklists defined for this project"
+      rightActions={
+        <button
+          onClick={handleExport}
+          disabled={checklists.length === 0}
+          className="btn-secondary flex items-center gap-1.5"
+        >
+          <Download size={15} /> Export
+        </button>
+      }
       onAdd={() => setShowAdd(true)}
       addLabel="Add Checklist"
     >

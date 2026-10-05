@@ -15,6 +15,7 @@ import {
     XCircle
 } from 'lucide-react';
 import { Checklist, ChecklistStage, Checkpoint } from '@/lib/types';
+import { exportToXlsx } from '@/lib/excelExport';
 import StageFormModal from '@/components/StageFormModal';
 import CheckpointFormModal from '@/components/CheckpointFormModal';
 import EditChecklistModal from '@/components/EditChecklistModal';
@@ -228,6 +229,49 @@ export default function ChecklistDetail() {
     const activeStage = stages.find(s => s.id === activeStageId);
     const stageCheckpoints = checkpoints.filter(cp => cp.stage_id === activeStageId);
 
+    const handleExport = () => {
+        if (!checklist) return;
+        const rows: any[] = [];
+        for (const stage of stages) {
+            const scps = checkpoints.filter(cp => cp.stage_id === stage.id || (cp as any).library_stage_id === stage.id);
+            if (scps.length === 0) {
+                rows.push({
+                    'Checklist Name': checklist.name,
+                    'REFERENCE NUMBER': checklist.reference_number || '',
+                    'Stage Name': stage.name,
+                    'Checkpoint': '',
+                    'Type': '',
+                    'Photo': '',
+                    'Remark': '',
+                });
+            } else {
+                for (const cp of scps) {
+                    rows.push({
+                        'Checklist Name': checklist.name,
+                        'REFERENCE NUMBER': checklist.reference_number || '',
+                        'Stage Name': stage.name,
+                        'Checkpoint': cp.question,
+                        'Type': cp.input_type === 'yes_no' ? 'Y/N' : cp.input_type?.toUpperCase(),
+                        'Photo': cp.photo_required ? 'TRUE' : 'FALSE',
+                        'Remark': cp.remark_required ? 'TRUE' : 'FALSE',
+                    });
+                }
+            }
+        }
+        if (rows.length === 0) {
+            rows.push({
+                'Checklist Name': checklist.name,
+                'REFERENCE NUMBER': checklist.reference_number || '',
+                'Stage Name': 'Single Stage',
+                'Checkpoint': '',
+                'Type': '',
+                'Photo': '',
+                'Remark': '',
+            });
+        }
+        exportToXlsx(rows, `checklist-${(checklist.name || 'export').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+    };
+
     return (
         <div className="flex flex-col h-full animate-fade-in">
             {/* Header */}
@@ -248,7 +292,13 @@ export default function ChecklistDetail() {
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleExport}
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        <Download size={16} /> Export
+                    </button>
                     <button
                         onClick={() => setIsEditModalOpen(true)}
                         className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-sm font-medium transition-colors"
