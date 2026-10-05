@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Plus, X, Loader2, Upload, ChevronDown, FileDown, Download, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { Users, Plus, X, Loader2, Upload, ChevronDown, FileDown, Download, ChevronLeft, ChevronRight, Pencil, Trash2, Search } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
-import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString } from '@/lib/excelImport';
+import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString, getField } from '@/lib/excelImport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
 import { exportToXlsx } from '@/lib/excelExport';
 import type { Team, Organization, Member } from '@/lib/types';
@@ -53,6 +53,8 @@ export default function Teams() {
   const [showImport, setShowImport] = useState(false);
   const [showTable, setShowTable] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [teamSearch, setTeamSearch] = useState('');
+  const [memberSearch, setMemberSearch] = useState('');
   const [form, setForm] = useState({ organization_id: '', name: '', type: 'developer', team_lead_name: '', spoc_name: '' });
   const [saving, setSaving] = useState(false);
   const [teamsPage, setTeamsPage] = useState(1);
@@ -95,21 +97,36 @@ export default function Teams() {
   const handleImport = async (data: ParsedRow[]): Promise<ImportResult> => {
     return bulkInsertWithChunking(async (chunk) => {
       const org = orgs[0];
-      const rows = chunk.map(r => ({
-        organization_id: org?.id || '',
-        name: sanitizeString(r.name || r.team_name || r.Name || 'Unnamed'),
-        type: sanitizeString(r.type || r.Type || 'inspection'),
-        team_lead_name: sanitizeString(r.team_lead_name || r.team_lead || ''),
-        spoc_name: sanitizeString(r.spoc_name || r.spoc || ''),
-        active_projects: sanitizeString(r.active_projects || r['Active Assigned Projects'] || ''),
-        inactive_projects: sanitizeString(r.inactive_projects || r['Inactive Assigned Projects'] || ''),
-      }));
+      const rows = chunk.map(r => {
+        const name = sanitizeString(getField(r, 'Name', 'name', 'Team Name', 'team_name', 'Team', 'team'));
+        const type = sanitizeString(getField(r, 'Type', 'type', 'Team Type', 'team_type') || 'inspection');
+        const team_lead_name = sanitizeString(getField(r, 'Team Lead', 'team_lead', 'Team Lead Name', 'team_lead_name', 'Lead', 'lead'));
+        const spoc_name = sanitizeString(getField(r, 'SPOC', 'spoc', 'SPOC Name', 'spoc_name'));
+        const users = sanitizeString(getField(r, 'Users', 'users', 'Members', 'members', 'User', 'user', 'Team Members', 'team_members'));
+        const active_projects = sanitizeString(getField(r, 'Active Assigned Projects', 'Active Projects', 'active_projects', 'active_assigned_projects'));
+        const inactive_projects = sanitizeString(getField(r, 'Inactive Assigned Projects', 'Inactive Projects', 'inactive_projects', 'inactive_assigned_projects'));
+
+        return {
+          organization_id: org?.id || '',
+          name: name || 'Unnamed',
+          type: type || 'inspection',
+          team_lead_name,
+          spoc_name,
+          users,
+          active_projects,
+          inactive_projects,
+        };
+      }).filter(r => r.name && r.name !== 'Unnamed');
+
       const res = await fetch('/api/teams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || (await res.text()) || 'Failed to import teams');
+      }
     }, data);
   };
 
@@ -199,28 +216,52 @@ export default function Teams() {
   const membersOfTeam = (team: Team) =>
     (Array.isArray(members) ? members : []).filter(m => (m.teams || '').split(',').map(s => s.trim().toLowerCase()).includes(team.name.trim().toLowerCase()));
 
-  const teamsTotalPages = Math.max(1, Math.ceil(teams.length / TEAMS_PAGE_SIZE));
+  const filteredTeams = teams.filter(t => {
+    const q = teamSearch.trim().toLowerCase();
+    if (!q) return true;
+    const name = (t.name || '').toLowerCase();
+    const type = (t.type || '').toLowerCase();
+    const activeProjects = (t.active_projects || '').toLowerCase();
+    return name.includes(q) || type.includes(q) || activeProjects.includes(q);
+  });
+
+  const teamsTotalPages = Math.max(1, Math.ceil(filteredTeams.length / TEAMS_PAGE_SIZE));
   const teamsPageClamped = Math.min(teamsPage, teamsTotalPages);
-  const paginatedTeams = teams.slice((teamsPageClamped - 1) * TEAMS_PAGE_SIZE, teamsPageClamped * TEAMS_PAGE_SIZE);
+  const paginatedTeams = filteredTeams.slice((teamsPageClamped - 1) * TEAMS_PAGE_SIZE, teamsPageClamped * TEAMS_PAGE_SIZE);
 
   const selectedTeamMembers = selectedTeam ? membersOfTeam(selectedTeam) : [];
-  const membersTotalPages = Math.max(1, Math.ceil(selectedTeamMembers.length / MEMBERS_PAGE_SIZE));
+  const filteredTeamMembers = selectedTeamMembers.filter(m => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return true;
+    const name = (m.name || '').toLowerCase();
+    const email = (m.email || '').toLowerCase();
+    const phone = (m.phone || '').toLowerCase();
+    return name.includes(q) || email.includes(q) || phone.includes(q);
+  });
+
+  const membersTotalPages = Math.max(1, Math.ceil(filteredTeamMembers.length / MEMBERS_PAGE_SIZE));
   const membersPageClamped = Math.min(membersPage, membersTotalPages);
-  const paginatedMembers = selectedTeamMembers.slice((membersPageClamped - 1) * MEMBERS_PAGE_SIZE, membersPageClamped * MEMBERS_PAGE_SIZE);
+  const paginatedMembers = filteredTeamMembers.slice((membersPageClamped - 1) * MEMBERS_PAGE_SIZE, membersPageClamped * MEMBERS_PAGE_SIZE);
 
   const handleSelectTeam = (t: Team) => {
     setSelectedTeam(t);
     setMembersPage(1);
+    setMemberSearch('');
   };
 
-  const exportRows = () => teams.map(t => ({
-    Name: t.name,
-    Type: t.type,
-    'Team Lead': t.team_lead_name,
-    SPOC: t.spoc_name,
-    'Active Assigned Projects': t.active_projects,
-    'Inactive Assigned Projects': t.inactive_projects,
-  }));
+  const exportRows = () => (filteredTeams.length > 0 ? filteredTeams : teams).map(t => {
+    const teamMembers = membersOfTeam(t);
+    const userNames = teamMembers.map(m => m.name).filter(Boolean).join(', ');
+    return {
+      Name: t.name,
+      Type: t.type,
+      'Team Lead': t.team_lead_name || '',
+      SPOC: t.spoc_name || '',
+      'Users': userNames || '',
+      'Active Assigned Projects': t.active_projects || '',
+      'Inactive Assigned Projects': t.inactive_projects || '',
+    };
+  });
 
   return (
     <div className="p-6 animate-fade-in">
@@ -248,69 +289,93 @@ export default function Teams() {
                 </button>
               </div>
               {showTable && (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
-                      <tr>
-                        {['Team Name', 'Type', 'Active Projects', 'Created', 'Action'].map(h => (
-                          <th key={h} className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {paginatedTeams.map(t => (
-                        <tr
-                          key={t.id}
-                          onClick={() => handleSelectTeam(t)}
-                          className={`cursor-pointer transition-colors ${selectedTeam?.id === t.id ? 'bg-teal-50 dark:bg-teal-500/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
-                        >
-                          <td className="px-5 py-3 text-gray-900 dark:text-white font-medium">{t.name}</td>
-                          <td className="px-5 py-3"><span className={`badge ${typeColors[t.type] ?? 'badge-active'} capitalize text-xs`}>{t.type}</span></td>
-                          {/* <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{t.team_lead_name || '—'}</td>
-                          <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{t.spoc_name || '—'}</td> */}
-                          <td className="px-5 py-3 text-xs max-w-xs">
-                            <div className="relative group inline-block max-w-full ">
-                              <span className="text-gray-600 dark:text-gray-300 truncate block underline decoration-dotted decoration-gray-400 underline-offset-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors">
-                                {formatProjectList(t.active_projects)}
-                              </span>
-                              {t.active_projects && (
-                                <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-64 max-w-xs opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 origin-top-left">
-                                  <div className="rounded-lg bg-gray-900 dark:bg-gray-800 text-white text-xs leading-relaxed p-3 shadow-xl border border-gray-800 dark:border-gray-700">
-                                    {t.active_projects}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          {/* <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate" title={t.inactive_projects}>{formatProjectList(t.inactive_projects)}</td> */}
-                          <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">{new Date(t.created_at).toLocaleDateString('en-IN')}</td>
-                          <td className="px-5 py-3">
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleEdit(t); }}
-                                disabled={editingTeam !== null || deletingId === t.id || t.name?.toLowerCase() === 'main team'}
-                                title={t.name?.toLowerCase() === 'main team' ? 'Main team cannot be edited' : 'Edit team'}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-500/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                              >
-                                <Pencil size={15} />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }}
-                                disabled={editingTeam !== null || deletingId === t.id || t.name?.toLowerCase() === 'main team'}
-                                title={t.name?.toLowerCase() === 'main team' ? 'Main team cannot be deleted' : 'Delete team'}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                              >
-                                {deletingId === t.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-                              </button>
-                            </div>
-                          </td>
+                <>
+                  <div className="p-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search teams by name, type, or project..."
+                        className="w-full pl-9 pr-4 py-2 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-teal-500 transition-all placeholder-gray-400"
+                        value={teamSearch}
+                        onChange={e => {
+                          setTeamSearch(e.target.value);
+                          setTeamsPage(1);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
+                        <tr>
+                          {['Team Name', 'Type', 'Active Projects', 'Created', 'Action'].map(h => (
+                            <th key={h} className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">{h}</th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {paginatedTeams.map(t => (
+                          <tr
+                            key={t.id}
+                            onClick={() => handleSelectTeam(t)}
+                            className={`cursor-pointer transition-colors ${selectedTeam?.id === t.id ? 'bg-teal-50 dark:bg-teal-500/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
+                          >
+                            <td className="px-5 py-3 text-gray-900 dark:text-white font-medium">{t.name}</td>
+                            <td className="px-5 py-3"><span className={`badge ${typeColors[t.type] ?? 'badge-active'} capitalize text-xs`}>{t.type}</span></td>
+                            {/* <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{t.team_lead_name || '—'}</td>
+                            <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{t.spoc_name || '—'}</td> */}
+                            <td className="px-5 py-3 text-xs max-w-xs">
+                              <div className="relative group inline-block max-w-full ">
+                                <span className="text-gray-600 dark:text-gray-300 truncate block underline decoration-dotted decoration-gray-400 underline-offset-2 hover:text-teal-600 dark:hover:text-teal-400 transition-colors">
+                                  {formatProjectList(t.active_projects)}
+                                </span>
+                                {t.active_projects && (
+                                  <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-64 max-w-xs opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 origin-top-left">
+                                    <div className="rounded-lg bg-gray-900 dark:bg-gray-800 text-white text-xs leading-relaxed p-3 shadow-xl border border-gray-800 dark:border-gray-700">
+                                      {t.active_projects}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            {/* <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate" title={t.inactive_projects}>{formatProjectList(t.inactive_projects)}</td> */}
+                            <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">{new Date(t.created_at).toLocaleDateString('en-IN')}</td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleEdit(t); }}
+                                  disabled={editingTeam !== null || deletingId === t.id || t.name?.toLowerCase() === 'main team'}
+                                  title={t.name?.toLowerCase() === 'main team' ? 'Main team cannot be edited' : 'Edit team'}
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-500/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  <Pencil size={15} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }}
+                                  disabled={editingTeam !== null || deletingId === t.id || t.name?.toLowerCase() === 'main team'}
+                                  title={t.name?.toLowerCase() === 'main team' ? 'Main team cannot be deleted' : 'Delete team'}
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  {deletingId === t.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredTeams.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-5 py-8 text-center text-gray-500 dark:text-gray-400 text-xs">
+                              {teamSearch ? 'No teams found matching your search.' : 'No teams configured.'}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Pagination page={teamsPageClamped} totalItems={filteredTeams.length} pageSize={TEAMS_PAGE_SIZE} onPageChange={setTeamsPage} />
+                </>
               )}
-              <Pagination page={teamsPageClamped} totalItems={teams.length} pageSize={TEAMS_PAGE_SIZE} onPageChange={setTeamsPage} />
             </div>
           )}
         </div>
@@ -343,9 +408,26 @@ export default function Teams() {
                   <X size={16} />
                 </button>
               </div>
+              <div className="p-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder={`Search members in ${selectedTeam.name}...`}
+                    className="w-full pl-9 pr-4 py-2 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-teal-500 transition-all placeholder-gray-400"
+                    value={memberSearch}
+                    onChange={e => {
+                      setMemberSearch(e.target.value);
+                      setMembersPage(1);
+                    }}
+                  />
+                </div>
+              </div>
               <div className="max-h-[32rem] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-                {selectedTeamMembers.length === 0 ? (
-                  <p className="p-5 text-sm text-gray-500 dark:text-gray-400">No members found for this team.</p>
+                {filteredTeamMembers.length === 0 ? (
+                  <p className="p-5 text-sm text-gray-500 dark:text-gray-400">
+                    {memberSearch ? 'No matching members found in this team.' : 'No members found for this team.'}
+                  </p>
                 ) : (
                   paginatedMembers.map(m => (
                     <div key={m.id} className="p-4 flex items-start justify-between gap-3">
@@ -362,7 +444,7 @@ export default function Teams() {
                   ))
                 )}
               </div>
-              <Pagination page={membersPageClamped} totalItems={selectedTeamMembers.length} pageSize={MEMBERS_PAGE_SIZE} onPageChange={setMembersPage} />
+              <Pagination page={membersPageClamped} totalItems={filteredTeamMembers.length} pageSize={MEMBERS_PAGE_SIZE} onPageChange={setMembersPage} />
             </div>
           ) : (
             <div className="card p-10 flex flex-col items-center justify-center text-center text-gray-400 dark:text-gray-500">
@@ -483,7 +565,28 @@ export default function Teams() {
         isOpen={showImport}
         onClose={() => { setShowImport(false); load(); }}
         title="Import Teams"
-        description="Upload an Excel or CSV file with columns: Name, Type, Team Lead, SPOC, Active Assigned Projects, Inactive Assigned Projects"
+        description="Upload an Excel or CSV file with columns: Name, Type, Team Lead, SPOC, Users, Active Assigned Projects, Inactive Assigned Projects"
+        columns={['Name', 'Type', 'Team Lead', 'SPOC', 'Users', 'Active Assigned Projects', 'Inactive Assigned Projects']}
+        sampleData={[
+          {
+            'Name': 'QC Team Alpha',
+            'Type': 'inspection',
+            'Team Lead': 'Rajesh Kumar',
+            'SPOC': 'Priya Singh',
+            'Users': 'Rajesh Kumar, Priya Singh',
+            'Active Assigned Projects': 'Block-A Foundation, MEP Installation Ph1',
+            'Inactive Assigned Projects': '',
+          },
+          {
+            'Name': 'Audit Team',
+            'Type': 'audit',
+            'Team Lead': 'David Williams',
+            'SPOC': 'Emma Watson',
+            'Users': 'David Williams, Emma Watson',
+            'Active Assigned Projects': '',
+            'Inactive Assigned Projects': 'Facade Cladding QC',
+          },
+        ]}
         onImport={handleImport}
       />
     </div>

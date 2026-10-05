@@ -7,14 +7,21 @@ import { usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 // Pages that should render without the app shell (auth pages, etc.)
-const authPages = ['/login', '/register', '/select-org'];
+const authPages = [
+    '/login',
+    '/register',
+    '/select-org',
+    '/setpassword',
+    '/set-password',
+    '/create-password',
+];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const { loading } = useAuth();
 
     // Auth pages don't need the sidebar/header layout
-    if (authPages.includes(pathname)) {
+    if (authPages.some(page => pathname === page || pathname.startsWith(page + '/'))) {
         return <>{children}</>;
     }
 

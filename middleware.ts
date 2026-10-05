@@ -24,7 +24,15 @@ function getTokenFromCookie(header: string): string | null {
 }
 
 // Routes that don't require authentication
-const publicRoutes = ['/login', '/register', '/register/verify-otp', '/login/verify-otp'];
+const publicRoutes = [
+    '/login',
+    '/register',
+    '/register/verify-otp',
+    '/login/verify-otp',
+    '/setpassword',
+    '/set-password',
+    '/create-password',
+];
 
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
@@ -40,7 +48,7 @@ export function middleware(request: NextRequest) {
     }
 
     // Public routes
-    if (publicRoutes.includes(pathname)) {
+    if (publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
         return NextResponse.next();
     }
 
@@ -49,7 +57,8 @@ export function middleware(request: NextRequest) {
         pathname.startsWith('/api/auth/login') ||
         pathname.startsWith('/api/auth/register') ||
         pathname.startsWith('/api/auth/verify-otp') ||
-        pathname.startsWith('/api/auth/resend-otp')
+        pathname.startsWith('/api/auth/resend-otp') ||
+        pathname.startsWith('/api/auth/set-password')
     ) {
         return NextResponse.next();
     }

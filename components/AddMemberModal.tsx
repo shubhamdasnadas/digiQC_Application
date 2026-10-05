@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Plus, ChevronLeft, Search, Check } from 'lucide-react';
+import { X, Plus, ChevronLeft, Search, Check, Mail, CheckCircle2 } from 'lucide-react';
 
 interface Team {
   id: string;
@@ -23,6 +23,7 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess, member }: A
   const [isAddingTeam, setIsAddingTeam] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(false);
+  const [emailSentNotice, setEmailSentNotice] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -39,6 +40,8 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess, member }: A
 
   useEffect(() => {
     if (isOpen) {
+      setEmailSentNotice(null);
+      setStep(1);
       fetchTeams();
       if (member) {
         setFormData({
@@ -101,7 +104,7 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess, member }: A
     try {
       const method = member ? 'PUT' : 'POST';
       const url = member ? `/api/members?id=${member.id}` : '/api/members';
-      
+
       const res = await fetch(url, {
         method: method,
         headers: { 'Content-Type': 'application/json' },
@@ -113,9 +116,16 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess, member }: A
           teams: formData.teamId,
         }),
       });
+      const data = await res.json();
       if (res.ok) {
         onSuccess();
-        onClose();
+        if (data.emailSent) {
+          setEmailSentNotice(data.emailSentTo || formData.email);
+        } else {
+          onClose();
+        }
+      } else {
+        alert(data.error || `Failed to ${member ? 'update' : 'add'} member`);
       }
     } catch (error) {
       console.error(`Failed to ${member ? 'update' : 'add'} member:`, error);
@@ -125,6 +135,45 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess, member }: A
   };
 
   if (!isOpen) return null;
+
+  if (emailSentNotice) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center space-y-6 animate-in fade-in zoom-in duration-200 relative">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1.5 rounded-full bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-500 transition-colors"
+          >
+            <X size={18} />
+          </button>
+
+          <div className="w-16 h-16 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner ring-8 ring-teal-50/50">
+            <Mail size={32} />
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xl font-bold text-gray-900">Check Email</h3>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              A secure password {member ? 'update' : 'setup'} link has been sent to{' '}
+              <span className="font-semibold text-teal-700">{emailSentNotice}</span>.
+            </p>
+            <p className="text-xs text-gray-400">
+              The user can click the link in the email to set their password and log in immediately.
+            </p>
+          </div>
+
+          <div className="pt-2">
+            <button
+              onClick={onClose}
+              className="w-full py-3 bg-teal-500 text-white rounded-full font-semibold hover:bg-teal-600 transition-all shadow-lg shadow-teal-200 text-sm"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">

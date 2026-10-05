@@ -37,6 +37,13 @@ export async function ensurePublicSchemaTables() {
         updated_at timestamptz DEFAULT now()
       );
 
+      ALTER TABLE public.users ADD COLUMN IF NOT EXISTS name text DEFAULT '';
+      ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email text;
+      ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash text DEFAULT '';
+      ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url text DEFAULT '';
+      ALTER TABLE public.users ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+      ALTER TABLE public.users ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
       CREATE TABLE IF NOT EXISTS public.otp_verifications (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         email text NOT NULL,

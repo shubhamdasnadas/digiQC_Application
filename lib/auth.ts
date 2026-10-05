@@ -35,6 +35,22 @@ export function verifyToken(token: string): JwtPayload | null {
     }
 }
 
+export function signPasswordSetupToken(email: string, userId?: string): string {
+    return jwt.sign({ email: email.toLowerCase().trim(), userId: userId || 'new', purpose: 'set-password' }, JWT_SECRET, { expiresIn: '24h' });
+}
+
+export function verifyPasswordSetupToken(token: string): { email: string; userId?: string } | null {
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        if (decoded && decoded.email && decoded.purpose === 'set-password') {
+            return { email: decoded.email, userId: decoded.userId };
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 // ─── Session cookie helpers ────────────────────────────────────
 export const COOKIE_NAME = 'digiqc_session';
 

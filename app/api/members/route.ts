@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, signPasswordSetupToken } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
 import { ensureMemberSchema } from '@/lib/memberSchema';
+import { sendPasswordSetupEmail } from '@/lib/email';
+import { getBaseUrl } from '@/lib/network';
 
 export async function GET(request: NextRequest) {
   const { payload, response } = requireAuth(request);
@@ -52,6 +54,10 @@ export async function PUT(request: NextRequest) {
     const activeProjects = body.active_projects !== undefined ? String(body.active_projects).trim() : existing.active_projects;
     const inactiveProjects = body.inactive_projects !== undefined ? String(body.inactive_projects).trim() : existing.inactive_projects;
 
+    const oldEmail = (existing.email || '').toLowerCase().trim();
+    const newEmail = email.toLowerCase().trim();
+    const emailUpdated = newEmail !== '' && newEmail !== oldEmail;
+
     await orgQuery(payload.orgId!,
       `UPDATE members
        SET name = $1,
@@ -79,7 +85,23 @@ export async function PUT(request: NextRequest) {
       ]
     );
 
-    return NextResponse.json({ success: true });
+    let emailSent = false;
+    if (emailUpdated && newEmail.includes('@')) {
+      try {
+        const token = signPasswordSetupToken(newEmail, id);
+        const setupLink = `${getBaseUrl(request)}/setpassword?token=${encodeURIComponent(token)}&email=${encodeURIComponent(newEmail)}`;
+        await sendPasswordSetupEmail(newEmail, name, setupLink, true);
+        emailSent = true;
+      } catch (mailErr) {
+        console.error('Failed to send password setup email on edit member:', mailErr);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      emailSent,
+      emailSentTo: emailSent ? email : null,
+    });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
@@ -225,7 +247,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true });
+    let emailSent = false;
+    let emailSentTo: string | null = null;
+
+    // Send password setup email if single member was added with an email
+    if (rows.length === 1 && rows[0].email && String(rows[0].email).trim().includes('@')) {
+      const email = String(rows[0].email).trim();
+      const name = String(rows[0].name || '').trim() || 'User';
+      try {
+        const token = signPasswordSetupToken(email);
+        const setupLink = `${getBaseUrl(request)}/setpassword?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+        await sendPasswordSetupEmail(email, name, setupLink, false);
+        emailSent = true;
+        emailSentTo = email;
+      } catch (mailErr) {
+        console.error('Failed to send password setup email on add member:', mailErr);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      emailSent,
+      emailSentTo,
+    });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
