@@ -10,9 +10,19 @@ interface AuthState {
     loading: boolean;
 }
 
+interface CheckUserResult {
+    exists: boolean;
+    email?: string;
+    name?: string;
+    hasPassword?: boolean;
+    error?: string;
+}
+
 interface AuthContextValue extends AuthState {
-    login: (email: string, password: string) => Promise<{ error?: string; requireOtp?: boolean; email?: string }>;
-    verifyOtp: (email: string, otp: string) => Promise<{ error?: string }>;
+    checkUser: (identifier: string) => Promise<CheckUserResult>;
+    login: (email: string, password: string) => Promise<{ error?: string; success?: boolean }>;
+    sendOtp: (email: string) => Promise<{ error?: string; message?: string; email?: string }>;
+    verifyOtp: (email: string, otp: string) => Promise<{ error?: string; success?: boolean }>;
     resendOtp: (email: string) => Promise<{ error?: string; message?: string }>;
     register: (name: string, email: string, password: string) => Promise<{ error?: string }>;
     logout: () => Promise<void>;
@@ -48,22 +58,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => { fetchMe(); }, [fetchMe]);
 
+    const checkUser = async (identifier: string): Promise<CheckUserResult> => {
+        try {
+            const res = await fetch('/api/auth/check-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier: identifier.trim() }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                return { exists: false, error: data.error || 'User not found in database' };
+            }
+            return {
+                exists: true,
+                email: data.email,
+                name: data.name,
+                hasPassword: data.hasPassword,
+            };
+        } catch (err) {
+            return { exists: false, error: (err as Error).message || 'Failed to check user' };
+        }
+    };
+
     const login = async (email: string, password: string) => {
         try {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ email: email.trim(), password }),
             });
             const data = await res.json();
             if (!res.ok) return { error: data.error || 'Login failed' };
-            if (data.requireOtp) {
-                return { requireOtp: true, email: data.email };
-            }
-            await fetchMe();
-            return {};
+            setState({
+                user: data.user,
+                orgs: data.orgs ?? [],
+                currentOrg: data.currentOrg ?? null,
+                loading: false,
+            });
+            return { success: true };
         } catch (err) {
             return { error: (err as Error).message || 'An unexpected error occurred' };
+        }
+    };
+
+    const sendOtp = async (email: string) => {
+        try {
+            const res = await fetch('/api/auth/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email.trim() }),
+            });
+            const data = await res.json();
+            if (!res.ok) return { error: data.error || 'Failed to send OTP' };
+            return { message: data.message, email: data.email };
+        } catch (err) {
+            return { error: (err as Error).message || 'Failed to send OTP' };
         }
     };
 
@@ -72,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const res = await fetch('/api/auth/verify-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, otp }),
+                body: JSON.stringify({ email: email.trim(), otp: otp.trim() }),
             });
             const data = await res.json();
             if (!res.ok) return { error: data.error || 'Invalid OTP code' };
@@ -82,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 currentOrg: data.currentOrg ?? null,
                 loading: false,
             });
-            return {};
+            return { success: true };
         } catch (err) {
             return { error: (err as Error).message || 'Failed to verify OTP' };
         }
@@ -93,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const res = await fetch('/api/auth/resend-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email }),
+                body: JSON.stringify({ email: email.trim() }),
             });
             const data = await res.json();
             if (!res.ok) return { error: data.error || 'Failed to resend OTP' };
@@ -143,7 +192,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refresh = fetchMe;
 
     return (
-        <AuthContext.Provider value={{ ...state, login, verifyOtp, resendOtp, register, logout, switchOrg, refresh }}>
+        <AuthContext.Provider value={{
+            ...state,
+            checkUser,
+            login,
+            sendOtp,
+            verifyOtp,
+            resendOtp,
+            register,
+            logout,
+            switchOrg,
+            refresh
+        }}>
             {children}
         </AuthContext.Provider>
     );

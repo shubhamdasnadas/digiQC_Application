@@ -98,8 +98,75 @@ export function requireAuth(request: NextRequest): { payload: JwtPayload; respon
 
 // ─── DB helpers ────────────────────────────────────────────────
 export async function findUserByEmail(email: string) {
-    const { rows } = await pool.query('SELECT * FROM public.users WHERE email = $1', [email.toLowerCase().trim()]);
-    return rows[0] || null;
+    const normalized = (email || '').toLowerCase().trim();
+    if (!normalized) return null;
+
+    const { rows } = await pool.query('SELECT * FROM public.users WHERE LOWER(TRIM(email)) = $1', [normalized]);
+    if (rows.length > 0) {
+        return rows[0];
+    }
+
+    // Check members table in case user was added as member but hasn't set password in public.users yet
+    try {
+        const { rows: memberRows } = await pool.query(
+            'SELECT id, organization_id, name, email, phone, default_role FROM public.members WHERE LOWER(TRIM(email)) = $1 LIMIT 1',
+            [normalized]
+        );
+        if (memberRows.length > 0) {
+            const member = memberRows[0];
+            const userName = member.name || normalized.split('@')[0];
+            const { rows: newUsers } = await pool.query(
+                `INSERT INTO public.users (name, email, password_hash, created_at, updated_at)
+                 VALUES ($1, $2, '', NOW(), NOW())
+                 ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+                 RETURNING *`,
+                [userName, normalized]
+            );
+            const user = newUsers[0];
+            if (member.organization_id && user?.id) {
+                const orgRole = member.default_role?.toLowerCase() === 'admin' ? 'admin' : 'member';
+                await pool.query(
+                    `INSERT INTO public.org_members (user_id, organization_id, role, status, created_at)
+                     VALUES ($1, $2, $3, 'active', NOW())
+                     ON CONFLICT (user_id, organization_id) DO NOTHING`,
+                    [user.id, member.organization_id, orgRole]
+                );
+            }
+            return user;
+        }
+    } catch (err) {
+        console.warn('Error checking members in findUserByEmail:', err);
+    }
+
+    return null;
+}
+
+export async function findUserByIdentifier(identifier: string) {
+    const trimmed = (identifier || '').trim();
+    if (!trimmed) return null;
+
+    if (trimmed.includes('@')) {
+        return findUserByEmail(trimmed);
+    }
+
+    // Lookup by mobile number in members table
+    const digitsOnly = trimmed.replace(/[\s\-()]/g, '').replace(/^\+/, '');
+    try {
+        const { rows: memberRows } = await pool.query(
+            `SELECT id, organization_id, name, email, phone, default_role
+             FROM public.members
+             WHERE TRIM(phone) = $1 OR REPLACE(TRIM(phone), ' ', '') = $2 OR REPLACE(TRIM(phone), '+', '') = $2
+             LIMIT 1`,
+            [trimmed, digitsOnly]
+        );
+        if (memberRows.length > 0 && memberRows[0].email) {
+            return findUserByEmail(memberRows[0].email);
+        }
+    } catch (err) {
+        console.warn('Error checking member by phone:', err);
+    }
+
+    return null;
 }
 
 export async function findUserById(id: string) {

@@ -511,6 +511,23 @@ function AddEQCWizardModal({
   const [submittedAttempt, setSubmittedAttempt] = useState(false);
   const [error, setError] = useState('');
 
+  // Close on Escape key press and prevent background scrolling
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [onClose]);
+
   // Fetch checklists on load
   useEffect(() => {
     async function loadChecklists() {
@@ -747,8 +764,18 @@ function AddEQCWizardModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-3xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden my-6 animate-scale-in">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto cursor-pointer"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="relative w-full max-w-3xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden my-6 animate-scale-in cursor-default"
+        onClick={(e) => e.stopPropagation()}
+      >
 
         {/* ─── STEP 1: Project, Checklist & Location (Image #17) ─── */}
         {step === 1 && (
@@ -1364,6 +1391,27 @@ function InspectionDetailModal({
 }) {
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
 
+  // Close modal or enlarged photo on Escape key press, lock background scroll
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (enlargedImage) {
+          setEnlargedImage(null);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [onClose, enlargedImage]);
+
   const rawInspectionData = inspection.inspection_data;
   let parsedCheckpoints: CheckpointResult[] = [];
   if (Array.isArray(rawInspectionData)) {
@@ -1396,8 +1444,18 @@ function InspectionDetailModal({
   const syncedTime = inspection.synced_at || inspection.inspected_at || inspection.created_at;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden my-6 animate-scale-in">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm overflow-y-auto cursor-pointer"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden my-6 animate-scale-in cursor-default"
+        onClick={(e) => e.stopPropagation()}
+      >
 
         {/* Top Header Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/80">
@@ -1681,10 +1739,13 @@ function InspectionDetailModal({
       {/* Enlarged Image Viewer */}
       {enlargedImage && (
         <div
-          className="fixed inset-0 z-60 bg-black/85 flex items-center justify-center p-6"
+          className="fixed inset-0 z-60 bg-black/85 flex items-center justify-center p-6 cursor-pointer"
           onClick={() => setEnlargedImage(null)}
         >
-          <div className="relative max-w-4xl max-h-[90vh]">
+          <div
+            className="relative max-w-4xl max-h-[90vh] cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setEnlargedImage(null)}
               className="absolute -top-10 right-0 text-white hover:text-gray-300 font-bold text-sm flex items-center gap-1"

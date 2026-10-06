@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { findUserByEmail, signToken, setCookieHeader, getUserOrgs } from '@/lib/auth';
 import { verifyOtpCode } from '@/lib/otp';
+import { ensurePublicSchemaTables } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
     try {
+        await ensurePublicSchemaTables();
         const { email, otp } = await request.json();
 
         if (!email || !otp) {
-            return NextResponse.json({ error: 'Email and OTP are required' }, { status: 400 });
+            return NextResponse.json({ error: 'Email and verification code are required' }, { status: 400 });
         }
 
-        const isValid = await verifyOtpCode(email, otp);
+        const isValid = await verifyOtpCode(String(email).trim(), String(otp).trim());
         if (!isValid) {
-            return NextResponse.json({ error: 'Invalid or expired verification code' }, { status: 400 });
+            return NextResponse.json({ error: 'Invalid or expired verification code. Please request a new code.' }, { status: 400 });
         }
 
-        const user = await findUserByEmail(email);
+        const user = await findUserByEmail(String(email).trim());
         if (!user) {
-            return NextResponse.json({ error: 'User not found' }, { status: 404 });
+            return NextResponse.json({ error: 'User account not found' }, { status: 404 });
         }
 
         // Get organizations the user belongs to
@@ -44,11 +46,13 @@ export async function POST(request: NextRequest) {
             },
             orgs,
             currentOrg: defaultOrg,
+            message: 'Signed in successfully with OTP',
         });
 
         response.headers.set('Set-Cookie', setCookieHeader(token));
         return response;
     } catch (error) {
+        console.error('Error in verify-otp route:', error);
         return NextResponse.json({ error: (error as Error).message }, { status: 500 });
     }
 }

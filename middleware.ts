@@ -58,7 +58,9 @@ export function middleware(request: NextRequest) {
         pathname.startsWith('/api/auth/register') ||
         pathname.startsWith('/api/auth/verify-otp') ||
         pathname.startsWith('/api/auth/resend-otp') ||
-        pathname.startsWith('/api/auth/set-password')
+        pathname.startsWith('/api/auth/set-password') ||
+        pathname.startsWith('/api/auth/check-user') ||
+        pathname.startsWith('/api/auth/send-otp')
     ) {
         return NextResponse.next();
     }

@@ -15,29 +15,30 @@ export async function POST(request: NextRequest) {
 
         const user = await findUserByEmail(String(email).trim());
         if (!user) {
-            return NextResponse.json({ error: 'User account not found' }, { status: 404 });
+            return NextResponse.json({ error: 'No account found with this email' }, { status: 404 });
         }
 
-        // Generate a new 6-digit OTP
+        // Generate a 6-digit OTP stored in database
         const otp = await generateAndSaveOtp(user.email);
 
-        // Send OTP via SMTP
+        // Send OTP via email
         try {
             await sendOtpEmail(user.email, otp, user.name);
         } catch (mailError) {
             console.error('Failed to send OTP email:', mailError);
             return NextResponse.json(
-                { error: 'Failed to send OTP email: ' + ((mailError as Error).message || 'SMTP error') },
+                { error: 'Failed to send verification code email: ' + ((mailError as Error).message || 'SMTP error') },
                 { status: 500 }
             );
         }
 
         return NextResponse.json({
             success: true,
-            message: `A new 6-digit verification code has been sent to ${user.email}`,
+            email: user.email,
+            message: `A 6-digit verification code has been sent to ${user.email}`,
         });
     } catch (error) {
-        console.error('Error in resend-otp route:', error);
+        console.error('Error in send-otp route:', error);
         return NextResponse.json({ error: (error as Error).message }, { status: 500 });
     }
 }
