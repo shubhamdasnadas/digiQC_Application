@@ -57,10 +57,13 @@ export async function getLibraryChecklistDetail(id: string): Promise<{
   const checklist = checklistRows[0];
 
   const { rows: stages } = await query(
-    `SELECT id, library_checklist_id AS checklist_id, sr_no, name, witness_required, drawing_required, created_at
+    `SELECT id, library_checklist_id AS checklist_id,
+            COALESCE("index", sr_no, 1) AS index,
+            COALESCE(sr_no, "index", 1) AS sr_no,
+            name, witness_required, drawing_required, created_at
      FROM public.library_stages
      WHERE library_checklist_id = $1
-     ORDER BY sr_no ASC`,
+     ORDER BY COALESCE("index", sr_no, 1) ASC, created_at ASC`,
     [id]
   ).catch(() => ({ rows: [] }));
 

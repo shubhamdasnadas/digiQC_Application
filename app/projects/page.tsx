@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  FolderKanban, Plus, Search, Upload, FileDown, Pencil, Users as UsersIcon,
+  FolderKanban, Plus, Search, Upload, FileDown, Pencil, Trash2, Loader2, Users as UsersIcon,
 } from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
 import ProjectFormModal from '@/components/ProjectFormModal';
@@ -34,8 +34,10 @@ export default function Projects() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<typeof statusOptions[number]>('all');
   const [showImport, setShowImport] = useState(false);
+  const [showAddProject, setShowAddProject] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [editInitial, setEditInitial] = useState<Partial<Project> | undefined>(undefined);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Debounce the search input so we don't refetch on every keystroke
   useEffect(() => {
@@ -123,6 +125,30 @@ export default function Projects() {
     }
   };
 
+  const handleDeleteProject = async (p: Project) => {
+    const name = p.name || 'this project';
+    if (!window.confirm(`Are you sure you want to delete "${name}"? This will permanently remove the project and its related data from the database.`)) {
+      return;
+    }
+
+    setDeletingId(p.id);
+    try {
+      const res = await fetch(`/api/projects?id=${p.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Failed to delete project');
+      }
+      // Optimistically remove from state
+      setProjects((prev) => prev.filter((item) => item.id !== p.id));
+    } catch (err) {
+      alert((err as Error).message || 'Failed to delete project');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="p-6 animate-fade-in">
       {/* ─── Header ─── */}
@@ -148,7 +174,14 @@ export default function Projects() {
           <button onClick={() => setShowImport(true)} className="btn-secondary">
             <Upload size={15} /> Import
           </button>
-          <button onClick={() => router.push('/projects/new')} className="btn-primary">
+          <button
+            onClick={() => {
+              setEditProjectId(null);
+              setEditInitial(undefined);
+              setShowAddProject(true);
+            }}
+            className="btn-primary"
+          >
             <Plus size={15} /> Add Project
           </button>
         </div>
@@ -204,7 +237,7 @@ export default function Projects() {
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Updated By</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Updated On</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">My Role</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Edit</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Actions</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th>
                 </tr>
               </thead>
@@ -212,6 +245,8 @@ export default function Projects() {
                 {projects.map((p, idx) => {
                   const memberCount = (p as any).member_count ?? 0;
                   const firstMember = (p as any).first_member_name as string | undefined;
+                  const adminName = (p as any).project_admin_name as string | undefined;
+                  const updaterName = (p as any).updated_by_name as string | undefined;
                   return (
                     <tr
                       key={p.id}
@@ -233,7 +268,11 @@ export default function Projects() {
                         {p.client_name || '—'}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
-                        {memberCount > 0 ? (
+                        {adminName ? (
+                          <span className="font-medium text-gray-900 dark:text-gray-100 block truncate max-w-[150px]">
+                            {adminName}
+                          </span>
+                        ) : memberCount > 0 ? (
                           <span>
                             {firstMember || 'Member'}{' '}
                             {memberCount > 1 && (
@@ -246,8 +285,8 @@ export default function Projects() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
-                        {p.updated_by ? p.updated_by.slice(0, 8) : '—'}
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
+                        {updaterName || (p.updated_by ? p.updated_by.slice(0, 8) : '—')}
                       </td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
                         {p.updated_at
@@ -258,15 +297,31 @@ export default function Projects() {
                             })
                           : new Date(p.created_at).toLocaleDateString('en-IN')}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">—</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
+                        {adminName ? 'Admin' : 'Member'}
+                      </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => openEdit(p)}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-teal-500"
-                          title="Edit project"
-                        >
-                          <Pencil size={13} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openEdit(p)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-500/10 transition-colors"
+                            title="Edit project"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProject(p)}
+                            disabled={deletingId === p.id}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                            title="Delete project"
+                          >
+                            {deletingId === p.id ? (
+                              <Loader2 size={13} className="animate-spin text-red-500" />
+                            ) : (
+                              <Trash2 size={13} />
+                            )}
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <button
@@ -299,7 +354,14 @@ export default function Projects() {
           <FolderKanban size={48} className="mb-4 opacity-30" />
           <p className="text-sm font-medium">No projects found</p>
           <p className="text-xs mt-1">Try adjusting your filters or add a new project</p>
-          <button onClick={() => router.push('/projects/new')} className="btn-primary mt-4">
+          <button
+            onClick={() => {
+              setEditProjectId(null);
+              setEditInitial(undefined);
+              setShowAddProject(true);
+            }}
+            className="btn-primary mt-4"
+          >
             <Plus size={14} /> Add Project
           </button>
         </div>
@@ -307,8 +369,9 @@ export default function Projects() {
 
       {/* ─── Modals ─── */}
       <ProjectFormModal
-        isOpen={!!editProjectId}
+        isOpen={showAddProject || !!editProjectId}
         onClose={() => {
+          setShowAddProject(false);
           setEditProjectId(null);
           setEditInitial(undefined);
         }}

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
 
+const isValidUuid = (val: any): boolean =>
+  typeof val === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
 /**
  * GET /api/projects
  * Query params:
@@ -19,16 +23,21 @@ export async function GET(request: NextRequest) {
     const q = searchParams.get('q')?.toLowerCase().trim() ?? '';
     const status = searchParams.get('status') ?? 'all';
 
-    // Single project fetch — joined with member count
+    // Single project fetch — joined with member count & admin info
     if (id) {
       const { rows } = await orgQuery(
         payload.orgId!,
         `SELECT p.*,
+                u.name AS project_admin_name,
+                u.email AS project_admin_email,
+                up.name AS updated_by_name,
                 (SELECT COUNT(*)::int FROM project_members pm WHERE pm.project_id = p.id) AS member_count,
                 (SELECT m.name FROM project_members pm
                   JOIN members m ON m.id = pm.user_id
                   WHERE pm.project_id = p.id ORDER BY pm.added_at LIMIT 1) AS first_member_name
          FROM projects p
+         LEFT JOIN users u ON u.id = p.project_admin_id
+         LEFT JOIN users up ON up.id = p.updated_by
          WHERE p.id = $1
          LIMIT 1`,
         [id]
@@ -45,12 +54,12 @@ export async function GET(request: NextRequest) {
 
     if (status !== 'all') {
       params.push(status);
-      whereClauses.push(`status = $${params.length}`);
+      whereClauses.push(`p.status = $${params.length}`);
     }
     if (q) {
       params.push(`%${q}%`);
       const i = params.length;
-      whereClauses.push(`(LOWER(name) LIKE $${i} OR LOWER(COALESCE(unique_code,'')) LIKE $${i} OR LOWER(COALESCE(client_name,'')) LIKE $${i} OR LOWER(COALESCE(nomenclature,'')) LIKE $${i})`);
+      whereClauses.push(`(LOWER(p.name) LIKE $${i} OR LOWER(COALESCE(p.unique_code,'')) LIKE $${i} OR LOWER(COALESCE(p.client_name,'')) LIKE $${i} OR LOWER(COALESCE(p.nomenclature,'')) LIKE $${i})`);
     }
 
     const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
@@ -58,11 +67,16 @@ export async function GET(request: NextRequest) {
     const { rows } = await orgQuery(
       payload.orgId ?? null,
       `SELECT p.*,
+              u.name AS project_admin_name,
+              u.email AS project_admin_email,
+              up.name AS updated_by_name,
               (SELECT COUNT(*)::int FROM project_members pm WHERE pm.project_id = p.id) AS member_count,
               (SELECT m.name FROM project_members pm
                 JOIN members m ON m.id = pm.user_id
                 WHERE pm.project_id = p.id ORDER BY pm.added_at LIMIT 1) AS first_member_name
        FROM projects p
+       LEFT JOIN users u ON u.id = p.project_admin_id
+       LEFT JOIN users up ON up.id = p.updated_by
        ${where}
        ORDER BY p.created_at DESC`,
       params
@@ -88,8 +102,12 @@ export async function POST(request: NextRequest) {
     for (const r of rows) {
       if (!r.name || !String(r.name).trim()) continue;
 
-      await orgQuery(
-        payload.orgId!,
+      const orgId = isValidUuid(payload.orgId) ? payload.orgId : null;
+      const adminId = isValidUuid(r.project_admin_id) ? r.project_admin_id : null;
+      const userId = isValidUuid(payload.userId) ? payload.userId : null;
+
+      const { rows: inserted } = await orgQuery(
+        payload.orgId ?? null,
         `INSERT INTO projects (
             organization_id, name, unique_code, client_name, description,
             project_admin_id, radius_m, timezone, latitude, longitude, address,
@@ -99,14 +117,14 @@ export async function POST(request: NextRequest) {
             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
             $12,$13,$14,
             $15,$16,$17,$18,$19,$20
-          )`,
+          ) RETURNING id`,
         [
-          payload.orgId,
+          orgId,
           r.name,
           r.unique_code ?? null,
           r.client_name ?? '',
           r.description ?? '',
-          r.project_admin_id ?? null,
+          adminId,
           r.radius_m ?? 100,
           r.timezone ?? 'Asia/Calcutta',
           r.latitude ?? null,
@@ -120,9 +138,24 @@ export async function POST(request: NextRequest) {
           r.profile ?? '',
           r.image_url ?? '',
           r.status ?? 'active',
-          payload.userId,
+          userId,
         ]
       );
+
+      // If project admin is assigned, ensure they exist in project_members
+      if (inserted?.[0]?.id && adminId) {
+        try {
+          await orgQuery(
+            payload.orgId ?? null,
+            `INSERT INTO project_members (project_id, user_id, role)
+             VALUES ($1, $2, 'admin')
+             ON CONFLICT (project_id, user_id) DO UPDATE SET role = 'admin'`,
+            [inserted[0].id, adminId]
+          );
+        } catch (pmErr) {
+          console.warn('Could not add admin to project_members:', pmErr);
+        }
+      }
     }
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -172,7 +205,11 @@ export async function PATCH(request: NextRequest) {
     const params: any[] = [];
     for (const [k, col] of Object.entries(allowed)) {
       if (k in body) {
-        params.push(body[k]);
+        let val = body[k];
+        if (k === 'project_admin_id') {
+          val = isValidUuid(val) ? val : null;
+        }
+        params.push(val);
         sets.push(`${col} = $${params.length}`);
       }
     }
@@ -181,14 +218,15 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Always stamp updated_by / updated_at
-    params.push(payload.userId);
+    const userId = isValidUuid(payload.userId) ? payload.userId : null;
+    params.push(userId);
     sets.push(`updated_by = $${params.length}`);
     sets.push(`updated_at = now()`);
 
     // id goes into the WHERE clause only
     params.push(id);
     const sql = `UPDATE projects SET ${sets.join(', ')} WHERE id = $${params.length}`;
-    await orgQuery(payload.orgId!, sql, params);
+    await orgQuery(payload.orgId ?? null, sql, params);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
@@ -208,7 +246,7 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'Missing project id' }, { status: 400 });
     }
-    await orgQuery(payload.orgId!, 'DELETE FROM projects WHERE id = $1', [id]);
+    await orgQuery(payload.orgId ?? null, 'DELETE FROM projects WHERE id = $1', [id]);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

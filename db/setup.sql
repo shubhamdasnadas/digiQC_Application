@@ -107,9 +107,40 @@ CREATE TABLE IF NOT EXISTS public.projects (
   created_at timestamptz DEFAULT now()
 );
 
+-- Remove foreign key constraints that restrict organization_id or admin_id
+ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_organization_id_fkey;
+ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_project_admin_id_fkey;
+ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_updated_by_fkey;
+ALTER TABLE public.teams DROP CONSTRAINT IF EXISTS teams_organization_id_fkey;
+ALTER TABLE public.members DROP CONSTRAINT IF EXISTS members_organization_id_fkey;
+
 CREATE INDEX IF NOT EXISTS projects_unique_code_idx
 ON public.projects (unique_code)
 WHERE unique_code IS NOT NULL;
+
+-- Project columns migration for existing installations
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS organization_id uuid;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS name text;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS nomenclature text DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS instruction text DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS profile text DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS image_url text DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS status text DEFAULT 'active';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS unique_code text;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS client_name text DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS description text DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS project_admin_id uuid;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS radius_m integer DEFAULT 100;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS timezone text DEFAULT 'Asia/Calcutta';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS latitude double precision;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS longitude double precision;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS address text DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS perm_location boolean DEFAULT false;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS perm_authentication boolean DEFAULT false;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS perm_rfi boolean DEFAULT false;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS updated_by uuid;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
 
 -- Library Checklists (Canonical Checklists in public schema)
 CREATE TABLE IF NOT EXISTS public.library_checklists (
@@ -128,11 +159,14 @@ CREATE TABLE IF NOT EXISTS public.library_stages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   library_checklist_id uuid NOT NULL REFERENCES public.library_checklists(id) ON DELETE CASCADE,
   sr_no integer NOT NULL DEFAULT 1,
+  "index" integer NOT NULL DEFAULT 1,
   name text NOT NULL,
   witness_required boolean DEFAULT false,
   drawing_required boolean DEFAULT false,
   created_at timestamptz DEFAULT now()
 );
+
+ALTER TABLE public.library_stages ADD COLUMN IF NOT EXISTS "index" integer DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS public.library_checkpoints (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -2,9 +2,8 @@
 
 import { Component, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Plus } from 'lucide-react';
+import { ArrowLeft, Loader2, Plus, XCircle } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { TIMEZONES as TIMEZONE_LIST } from '@/lib/types';
 
 class MapErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -24,11 +23,13 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
 const LocationPicker = dynamic(() => import('@/components/LocationPicker'), {
   ssr: false,
   loading: () => (
-    <div className="h-64 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse flex items-center justify-center text-xs text-gray-400">
+    <div className="h-[380px] sm:h-[440px] md:h-[480px] rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse flex items-center justify-center text-xs text-gray-400">
       Loading map…
     </div>
   ),
 });
+
+import { getTimezonesList } from '@/components/LocationPicker';
 
 interface OrgUser {
   id: string;
@@ -62,10 +63,10 @@ const DEFAULTS: FormValues = {
   perm_location: false,
   perm_authentication: false,
   perm_rfi: false,
-  radius_m: 100,
+  radius_m: 0,
   timezone: 'Asia/Calcutta',
-  latitude: null,
-  longitude: null,
+  latitude: 19.1623701,
+  longitude: 72.9376316,
   address: '',
 };
 
@@ -87,8 +88,14 @@ export default function NewProjectPage() {
   const set = <K extends keyof FormValues>(key: K, value: FormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
-  const handleLocation = (lat: number, lng: number, address: string) =>
-    setValues((v) => ({ ...v, latitude: lat, longitude: lng, address: address || v.address }));
+  const handleLocation = (lat: number, lng: number, address: string, timezone?: string) =>
+    setValues((v) => ({
+      ...v,
+      latitude: lat,
+      longitude: lng,
+      address: address || v.address,
+      timezone: timezone || v.timezone,
+    }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,88 +252,98 @@ export default function NewProjectPage() {
           </div>
         </div>
 
-        {/* ── Right: Site Details ── */}
+        {/* ── Right: Location Details (matching Image #5) ── */}
         <div className="w-1/2 overflow-y-auto p-8 bg-white dark:bg-gray-900">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-5 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            Site Details
+          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">
+            Location Details
           </h2>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            {/* Top row: Radius and TimeZone side-by-side */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                  Radius (m) <span className="text-red-500">*</span>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  <span className="text-red-500 font-bold mr-1">*</span>Radius (m)
                 </label>
-                <input
-                  type="number"
-                  min={1}
-                  className="input"
-                  placeholder="100"
-                  value={values.radius_m}
-                  onChange={(e) => set('radius_m', parseInt(e.target.value) || 0)}
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={1}
+                    className="input pr-8 focus:border-red-400 focus:ring-red-400 text-sm font-medium"
+                    placeholder="00"
+                    value={values.radius_m || ''}
+                    onChange={(e) => set('radius_m', parseInt(e.target.value) || 0)}
+                  />
+                  {values.radius_m > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => set('radius_m', 0)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    >
+                      <XCircle size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
+
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                  Time Zone <span className="text-red-500">*</span>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  <span className="text-red-500 font-bold mr-1">*</span>TimeZone
                 </label>
                 <select
-                  className="input"
+                  className="input text-sm font-medium"
                   value={values.timezone}
                   onChange={(e) => set('timezone', e.target.value)}
                 >
-                  {TIMEZONE_LIST.map((tz) => (
-                    <option key={tz} value={tz}>{tz}</option>
+                  {getTimezonesList().map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
                   ))}
                 </select>
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                Address / Location
-              </label>
+            {/* Google Map with floating address search and red radius circle */}
+            <div className="pt-1">
               <MapErrorBoundary>
                 <LocationPicker
                   apiKey={apiKey}
-                  initialLat={values.latitude}
-                  initialLng={values.longitude}
+                  token={process.env.NEXT_PUBLIC_LOCATIONIQ_TOKEN || ''}
+                  lat={values.latitude}
+                  lng={values.longitude}
+                  radius={values.radius_m}
+                  timezone={values.timezone}
+                  address={values.address}
                   onLocationSelect={handleLocation}
+                  onAddressChange={(address) => set('address', address)}
+                  onTimezoneChange={(tz) => set('timezone', tz)}
                 />
               </MapErrorBoundary>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* Bottom row: Latitude and Longitude */}
+            <div className="grid grid-cols-2 gap-4 pt-1">
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                  Latitude
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input"
-                  placeholder="19.0760"
-                  value={values.latitude ?? ''}
-                  onChange={(e) =>
-                    set('latitude', e.target.value === '' ? null : parseFloat(e.target.value))
-                  }
-                />
+                <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Latitude :
+                </span>
+                <span className="text-sm font-bold text-gray-900 dark:text-gray-100 font-mono select-all">
+                  {values.latitude !== null && values.latitude !== undefined
+                    ? Number(values.latitude).toFixed(7)
+                    : '19.1623701'}
+                </span>
               </div>
+
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                  Longitude
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  className="input"
-                  placeholder="72.8777"
-                  value={values.longitude ?? ''}
-                  onChange={(e) =>
-                    set('longitude', e.target.value === '' ? null : parseFloat(e.target.value))
-                  }
-                />
+                <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Longitude :
+                </span>
+                <span className="text-sm font-bold text-gray-900 dark:text-gray-100 font-mono select-all">
+                  {values.longitude !== null && values.longitude !== undefined
+                    ? Number(values.longitude).toFixed(7)
+                    : '72.9376316'}
+                </span>
               </div>
             </div>
           </div>

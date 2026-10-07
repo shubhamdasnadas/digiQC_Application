@@ -93,6 +93,9 @@ export interface Project {
   perm_location?: boolean;
   perm_authentication?: boolean;
   perm_rfi?: boolean;
+  project_admin_name?: string;
+  project_admin_email?: string;
+  updated_by_name?: string;
   updated_by?: string;
   updated_at?: string;
   created_at: string;
@@ -138,6 +141,7 @@ export interface ChecklistStage {
   checklist_id: string;
   library_checklist_id?: string;
   sr_no: number;
+  index?: number;
   name: string;
   witness_required?: boolean;
   drawing_required?: boolean;

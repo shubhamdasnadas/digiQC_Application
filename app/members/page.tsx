@@ -41,6 +41,18 @@ export default function Members() {
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    if (!showAdd && !editingMember) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAdd(false);
+        setEditingMember(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showAdd, editingMember]);
+
   const handleImport = async (data: ParsedRow[]): Promise<ImportResult> => {
     return bulkInsertWithChunking(async (chunk) => {
       const org = orgs[0];

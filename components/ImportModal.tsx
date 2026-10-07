@@ -1,7 +1,7 @@
 'use client';
 
 import { X, Upload, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { parseExcelFile, type ImportResult, type ParsedRow } from '@/lib/excelImport';
 
 interface ImportModalProps {
@@ -25,6 +25,15 @@ export default function ImportModal({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

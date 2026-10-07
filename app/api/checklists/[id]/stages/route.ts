@@ -33,16 +33,16 @@ export async function POST(
         }
 
         const { rows: countRows } = await orgQuery(payload.orgId!,
-            `SELECT COALESCE(MAX(sr_no), 0) AS max_sr FROM library_stages WHERE library_checklist_id = $1`,
+            `SELECT COALESCE(MAX(COALESCE("index", sr_no, 0)), 0) AS max_idx FROM library_stages WHERE library_checklist_id = $1`,
             [id]
         );
-        const nextSrNo = (parseInt(countRows[0]?.max_sr) || 0) + 1;
+        const nextIndex = (parseInt(countRows[0]?.max_idx) || 0) + 1;
 
         const { rows } = await orgQuery(payload.orgId!,
-            `INSERT INTO library_stages (library_checklist_id, sr_no, name, witness_required, drawing_required)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING id, library_checklist_id AS checklist_id, library_checklist_id, sr_no, name, witness_required, drawing_required, created_at`,
-            [id, nextSrNo, name.trim(), !!witness_required, !!drawing_required]
+            `INSERT INTO library_stages (library_checklist_id, sr_no, "index", name, witness_required, drawing_required)
+             VALUES ($1, $2, $2, $3, $4, $5)
+             RETURNING id, library_checklist_id AS checklist_id, library_checklist_id, sr_no, "index" AS index, name, witness_required, drawing_required, created_at`,
+            [id, nextIndex, name.trim(), !!witness_required, !!drawing_required]
         );
 
         if (checklistRows[0]?.project_id) {
@@ -65,7 +65,8 @@ export async function PATCH(
 
     try {
         const body = await request.json();
-        const { stage_id, name, witness_required, drawing_required, sr_no } = body;
+        const { stage_id, name, witness_required, drawing_required, sr_no, index } = body;
+        const targetIndex = index !== undefined ? Number(index) : (sr_no !== undefined ? Number(sr_no) : null);
 
         if (!stage_id) {
             return NextResponse.json({ error: 'stage_id is required.' }, { status: 400 });
@@ -83,14 +84,15 @@ export async function PATCH(
              SET name = COALESCE($1, name),
                  witness_required = COALESCE($2, witness_required),
                  drawing_required = COALESCE($3, drawing_required),
-                 sr_no = COALESCE($4, sr_no)
+                 sr_no = COALESCE($4, sr_no),
+                 "index" = COALESCE($4, "index")
              WHERE id = $5 AND library_checklist_id = $6
-             RETURNING id, library_checklist_id AS checklist_id, library_checklist_id, sr_no, name, witness_required, drawing_required, created_at`,
+             RETURNING id, library_checklist_id AS checklist_id, library_checklist_id, sr_no, "index" AS index, name, witness_required, drawing_required, created_at`,
             [
                 name !== undefined ? String(name).trim() : null,
                 witness_required !== undefined ? !!witness_required : null,
                 drawing_required !== undefined ? !!drawing_required : null,
-                sr_no !== undefined ? Number(sr_no) : null,
+                targetIndex,
                 stage_id,
                 id,
             ]

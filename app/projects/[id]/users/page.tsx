@@ -210,6 +210,14 @@ function AddMemberModal({
   const [isChecklistDropdownOpen, setIsChecklistDropdownOpen] = useState(false);
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
         const cRes = await fetch('/api/checklists');

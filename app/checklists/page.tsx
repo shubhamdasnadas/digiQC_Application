@@ -39,6 +39,18 @@ export default function Checklists() {
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    if (!showAdd && !editingChecklist) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAdd(false);
+        setEditingChecklist(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showAdd, editingChecklist]);
+
   const handleImport = async (data: ParsedRow[]): Promise<ImportResult> => {
     let lastChecklistName = '';
     let lastRefNum = '';

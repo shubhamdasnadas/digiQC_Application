@@ -94,6 +94,19 @@ export default function Teams() {
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    if (!showAdd && !showAddMember && !editingTeam) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAdd(false);
+        setShowAddMember(false);
+        setEditingTeam(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showAdd, showAddMember, editingTeam]);
+
   const handleImport = async (data: ParsedRow[]): Promise<ImportResult> => {
     return bulkInsertWithChunking(async (chunk) => {
       const org = orgs[0];

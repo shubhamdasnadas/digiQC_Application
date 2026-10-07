@@ -260,6 +260,64 @@ export async function ensurePublicSchemaTables() {
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
+      -- Project columns migration for existing installations
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS organization_id uuid;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS name text;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS nomenclature text DEFAULT '';
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS instruction text DEFAULT '';
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS profile text DEFAULT '';
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS image_url text DEFAULT '';
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS status text DEFAULT 'active';
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS unique_code text;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS client_name text DEFAULT '';
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS description text DEFAULT '';
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS project_admin_id uuid;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS radius_m integer DEFAULT 100;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS timezone text DEFAULT 'Asia/Calcutta';
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS latitude double precision;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS longitude double precision;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS address text DEFAULT '';
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS perm_location boolean DEFAULT false;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS perm_authentication boolean DEFAULT false;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS perm_rfi boolean DEFAULT false;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS updated_by uuid;
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+      ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+
+      -- Remove foreign key constraints that restrict organization_id or admin_id
+      ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_organization_id_fkey;
+      ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_project_admin_id_fkey;
+      ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_updated_by_fkey;
+      ALTER TABLE public.teams DROP CONSTRAINT IF EXISTS teams_organization_id_fkey;
+      ALTER TABLE public.members DROP CONSTRAINT IF EXISTS members_organization_id_fkey;
+
+      CREATE INDEX IF NOT EXISTS projects_unique_code_idx
+      ON public.projects (unique_code)
+      WHERE unique_code IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS public.project_members (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL,
+        role text NOT NULL DEFAULT 'member'
+          CHECK (role IN ('admin','member','inspector','approver','viewer')),
+        added_at timestamptz DEFAULT now(),
+        UNIQUE(project_id, user_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS project_members_project_idx
+      ON public.project_members (project_id);
+
+      CREATE TABLE IF NOT EXISTS public.project_teams (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+        team_id uuid NOT NULL REFERENCES public.teams(id) ON DELETE CASCADE,
+        assigned_checklist text DEFAULT '',
+        assigned_user text DEFAULT '',
+        added_at timestamptz DEFAULT now(),
+        UNIQUE(project_id, team_id)
+      );
+
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS maker_team text DEFAULT '';
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS witness_types text[] DEFAULT '{}';
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS witness_photos text[] DEFAULT '{}';

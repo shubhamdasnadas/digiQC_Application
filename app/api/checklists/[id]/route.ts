@@ -27,12 +27,15 @@ export async function GET(
 
         const checklist = checklistRows[0];
 
-        // Fetch stages
+        // Fetch stages ordered by index
         const { rows: stages } = await orgQuery(payload.orgId!,
-            `SELECT id, library_checklist_id AS checklist_id, library_checklist_id, sr_no, name, witness_required, drawing_required, created_at
+            `SELECT id, library_checklist_id AS checklist_id, library_checklist_id,
+                    COALESCE("index", sr_no, 1) AS index,
+                    COALESCE(sr_no, "index", 1) AS sr_no,
+                    name, witness_required, drawing_required, created_at
              FROM library_stages
              WHERE library_checklist_id = $1
-             ORDER BY sr_no ASC`,
+             ORDER BY COALESCE("index", sr_no, 1) ASC, created_at ASC`,
             [id]
         );
 
@@ -96,13 +99,21 @@ export async function PATCH(
             );
         }
 
-        // Reorder stages
+        // Reorder stages with 1-based index
         if (reorder_stages && Array.isArray(reorder_stages)) {
             for (let i = 0; i < reorder_stages.length; i++) {
-                await orgQuery(payload.orgId!,
-                    `UPDATE library_stages SET sr_no = $1 WHERE id = $2 AND library_checklist_id = $3`,
-                    [i + 1, reorder_stages[i], id]
-                );
+                const item = reorder_stages[i];
+                const stageId = typeof item === 'string' ? item : item?.id;
+                const newIdx = typeof item === 'object' && item?.index !== undefined ? Number(item.index) : (i + 1);
+
+                if (stageId) {
+                    await orgQuery(payload.orgId!,
+                        `UPDATE library_stages
+                         SET "index" = $1, sr_no = $1
+                         WHERE id = $2 AND library_checklist_id = $3`,
+                        [newIdx, stageId, id]
+                    );
+                }
             }
         }
 

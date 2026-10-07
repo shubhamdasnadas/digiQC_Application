@@ -178,11 +178,12 @@ export async function POST(request: NextRequest) {
           );
           if (parseInt(currStages[0]?.count || '0') === 0) {
             for (const stage of detail.stages) {
+              const stageIdx = stage.index || stage.sr_no || 1;
               const { rows: stageRows } = await orgQuery(payload.orgId!,
-                `INSERT INTO library_stages (library_checklist_id, sr_no, name, witness_required, drawing_required)
-                 VALUES ($1, $2, $3, $4, $5)
+                `INSERT INTO library_stages (library_checklist_id, sr_no, "index", name, witness_required, drawing_required)
+                 VALUES ($1, $2, $2, $3, $4, $5)
                  RETURNING id`,
-                [checklistId, stage.sr_no || 1, stage.name, stage.witness_required || false, stage.drawing_required || false]
+                [checklistId, stageIdx, stage.name, stage.witness_required || false, stage.drawing_required || false]
               );
               const stageId = stageRows[0].id;
 
@@ -219,14 +220,14 @@ export async function POST(request: NextRequest) {
           stageId = existingStages[0].id;
         } else {
           const { rows: countRows } = await orgQuery(payload.orgId!,
-            `SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr_no FROM library_stages WHERE library_checklist_id = $1`, [checklistId]);
-          const nextSrNo = parseInt(countRows[0].next_sr_no);
+            `SELECT COALESCE(MAX(COALESCE("index", sr_no, 0)), 0) + 1 AS next_idx FROM library_stages WHERE library_checklist_id = $1`, [checklistId]);
+          const nextIdx = parseInt(countRows[0].next_idx);
 
           const { rows: stageRows } = await orgQuery(payload.orgId!,
-            `INSERT INTO library_stages (library_checklist_id, sr_no, name, witness_required, drawing_required, created_at)
-             VALUES ($1, $2, $3, $4, $5, NOW())
+            `INSERT INTO library_stages (library_checklist_id, sr_no, "index", name, witness_required, drawing_required, created_at)
+             VALUES ($1, $2, $2, $3, $4, $5, NOW())
              RETURNING id`,
-            [checklistId, nextSrNo, stageName, !!row.witness_required, !!row.drawing_required]
+            [checklistId, nextIdx, stageName, !!row.witness_required, !!row.drawing_required]
           );
           stageId = stageRows[0].id;
         }

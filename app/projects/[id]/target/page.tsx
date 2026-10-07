@@ -75,6 +75,14 @@ function AddTargetModal({ projectId, onClose, onSaved }: { projectId: string; on
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.metric.trim()) { setError('Metric name is required.'); return; }

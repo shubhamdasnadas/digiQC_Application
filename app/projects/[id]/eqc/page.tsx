@@ -73,6 +73,34 @@ export default function EQCTab() {
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<EQC | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteInspection = async (inspection: EQC) => {
+    const loc = inspection.location || inspection.checklist_name || 'this inspection entry';
+    if (!window.confirm(`Are you sure you want to delete "${loc}"? This will permanently remove it from the database.`)) {
+      return;
+    }
+
+    setDeletingId(inspection.id);
+    try {
+      const res = await fetch(`/api/projects/${id}/eqcs?eqc_id=${inspection.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Failed to delete inspection');
+      }
+      // Optimistically remove from state
+      setEqcs((prev) => prev.filter((item) => item.id !== inspection.id));
+      if (selectedInspection?.id === inspection.id) {
+        setSelectedInspection(null);
+      }
+    } catch (err) {
+      alert((err as Error).message || 'Failed to delete inspection');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -226,15 +254,29 @@ export default function EQCTab() {
     {
       key: 'actions',
       header: '',
-      width: '60px',
+      width: '80px',
       render: (e) => (
-        <button
-          onClick={() => setSelectedInspection(e)}
-          className="p-1.5 text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-500/10 rounded-lg transition-colors"
-          title="View Inspection Details"
-        >
-          <Eye size={15} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setSelectedInspection(e)}
+            className="p-1.5 text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-500/10 rounded-lg transition-colors"
+            title="View Inspection Details"
+          >
+            <Eye size={15} />
+          </button>
+          <button
+            onClick={() => handleDeleteInspection(e)}
+            disabled={deletingId === e.id}
+            className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+            title="Delete Inspection Entry"
+          >
+            {deletingId === e.id ? (
+              <Loader2 size={15} className="animate-spin text-red-500" />
+            ) : (
+              <Trash2 size={15} />
+            )}
+          </button>
+        </div>
       ),
     },
   ];
@@ -1052,8 +1094,8 @@ function AddEQCWizardModal({
                 {/* Witness Photo upload */}
                 <div className="pt-1">
                   <div className="flex flex-wrap items-center gap-3">
-                    <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-xs text-gray-600 dark:text-gray-400 font-medium transition-colors">
-                      <Camera size={14} className="text-teal-600" />
+                    <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer text-xs text-gray-600 dark:text-gray-300 font-medium transition-colors">
+                      <Camera size={14} className="text-teal-600 dark:text-teal-400" />
                       <span>+ Add Witness Photo</span>
                       <input
                         type="file"
@@ -1065,7 +1107,7 @@ function AddEQCWizardModal({
                     </label>
 
                     {witnessPhotos.map((photo, i) => (
-                      <div key={i} className="relative group w-14 h-14 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                      <div key={i} className="relative group w-14 h-14 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={photo} alt={`Witness ${i}`} className="w-full h-full object-cover" />
                         <button
@@ -1098,12 +1140,12 @@ function AddEQCWizardModal({
                     ? 'border-2 border-rose-400 bg-rose-50/30 dark:bg-rose-500/10'
                     : ''
                 }`}>
-                  <label className={`flex items-center gap-2 px-3 py-2 border rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-xs font-semibold transition-colors ${
+                  <label className={`flex items-center gap-2 px-3 py-2 border rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer text-xs font-semibold transition-colors ${
                     submittedAttempt && stages[0]?.drawing_required && drawingPhotos.length === 0
                       ? 'border-rose-400 bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'
-                      : 'border-dashed border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400'
+                      : 'border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300'
                   }`}>
-                    <FileText size={14} className={stages[0]?.drawing_required ? 'text-rose-500' : 'text-teal-600'} />
+                    <FileText size={14} className={stages[0]?.drawing_required ? 'text-rose-500' : 'text-teal-600 dark:text-teal-400'} />
                     <span>+ Add Drawing Photo</span>
                     {stages[0]?.drawing_required && <span className="text-rose-500 font-bold">*</span>}
                     <input
@@ -1116,7 +1158,7 @@ function AddEQCWizardModal({
                   </label>
 
                   {drawingPhotos.map((photo, i) => (
-                    <div key={i} className="relative group w-14 h-14 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                    <div key={i} className="relative group w-14 h-14 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={photo} alt={`Drawing ${i}`} className="w-full h-full object-cover" />
                       <button
@@ -1165,7 +1207,7 @@ function AddEQCWizardModal({
                   <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">
                     Checkpoints ({checkpoints.length})
                   </label>
-                  <span className="text-[11px] text-gray-500">
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
                     Fields marked with <span className="text-rose-500 font-bold">*</span> are required
                   </span>
                 </div>
@@ -1182,13 +1224,13 @@ function AddEQCWizardModal({
                         key={cp.id || idx}
                         className={`p-4 rounded-2xl border transition-all shadow-sm space-y-3 ${
                           hasError
-                            ? 'border-rose-400 bg-rose-50/20 dark:bg-rose-500/5 dark:border-rose-500/40 ring-1 ring-rose-400'
-                            : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-850'
+                            ? 'border-rose-400 bg-rose-50/20 dark:bg-rose-500/10 dark:border-rose-500/40 ring-1 ring-rose-400'
+                            : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/80'
                         }`}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                           <div className="text-xs font-medium text-gray-900 dark:text-white leading-relaxed flex-1">
-                            <span className="font-bold text-teal-600 mr-2">{idx + 1}.</span>
+                            <span className="font-bold text-teal-600 dark:text-teal-400 mr-2">{idx + 1}.</span>
                             <span>{cp.question}</span>
                             <div className="inline-flex items-center gap-1.5 ml-2 align-middle">
                               {cp.photo_required && (
@@ -1205,7 +1247,7 @@ function AddEQCWizardModal({
                           </div>
 
                           {/* Action Buttons: Yes / No / Skip */}
-                          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl shrink-0">
+                          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900/80 p-1 rounded-xl shrink-0 border border-gray-200/60 dark:border-gray-700/60">
                             <button
                               type="button"
                               onClick={() =>
@@ -1217,7 +1259,7 @@ function AddEQCWizardModal({
                               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                                 current.response === 'Yes'
                                   ? 'bg-emerald-600 text-white shadow-sm'
-                                  : 'text-gray-600 dark:text-gray-400 hover:text-emerald-600'
+                                  : 'text-gray-600 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400'
                               }`}
                             >
                               Yes
@@ -1233,7 +1275,7 @@ function AddEQCWizardModal({
                               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                                 current.response === 'No'
                                   ? 'bg-rose-600 text-white shadow-sm'
-                                  : 'text-gray-600 dark:text-gray-400 hover:text-rose-600'
+                                  : 'text-gray-600 dark:text-gray-400 hover:text-rose-600 dark:hover:text-rose-400'
                               }`}
                             >
                               No
@@ -1249,7 +1291,7 @@ function AddEQCWizardModal({
                               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                                 current.response === 'Skip'
                                   ? 'bg-gray-600 text-white shadow-sm'
-                                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-800'
+                                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
                               }`}
                             >
                               Skip
@@ -1274,17 +1316,17 @@ function AddEQCWizardModal({
                                 className={`input py-1.5 text-xs w-full rounded-xl border transition-colors ${
                                   isRemarkMissing
                                     ? 'border-rose-400 bg-rose-50/40 text-rose-900 dark:text-rose-200 focus:ring-rose-500'
-                                    : 'border-gray-200 dark:border-gray-700'
+                                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100'
                                 }`}
                               />
                             </div>
 
-                            <label className={`flex items-center justify-center gap-1.5 px-3 py-1.5 border rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-xs font-semibold transition-colors shrink-0 ${
+                            <label className={`flex items-center justify-center gap-1.5 px-3 py-1.5 border rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer text-xs font-semibold transition-colors shrink-0 ${
                               isPhotoMissing
                                 ? 'border-rose-400 bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'
-                                : 'border-dashed border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-gray-800'
+                                : 'border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
                             }`}>
-                              <Camera size={13} className={cp.photo_required ? 'text-rose-500' : 'text-teal-600'} />
+                              <Camera size={13} className={cp.photo_required ? 'text-rose-500' : 'text-teal-600 dark:text-teal-400'} />
                               <span>Photo</span>
                               {cp.photo_required && <span className="text-rose-500 font-bold">*</span>}
                               <input
@@ -1314,7 +1356,7 @@ function AddEQCWizardModal({
                         {current.photos && current.photos.length > 0 && (
                           <div className="flex items-center gap-2 pt-1">
                             {current.photos.map((ph, pi) => (
-                              <div key={pi} className="relative group w-10 h-10 rounded-lg overflow-hidden border border-gray-200 shadow-sm">
+                              <div key={pi} className="relative group w-10 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={ph} alt={`CP ${idx} photo ${pi}`} className="w-full h-full object-cover" />
                                 <button
@@ -1506,7 +1548,7 @@ function InspectionDetailModal({
         <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
 
           {/* 1. Summary Card (Image #21 top section) */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-gray-850 border border-gray-200 dark:border-gray-800 shadow-sm space-y-3">
+          <div className="p-5 rounded-2xl bg-white dark:bg-gray-800/70 border border-gray-200 dark:border-gray-800 shadow-sm space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Location</p>
@@ -1544,7 +1586,7 @@ function InspectionDetailModal({
           </div>
 
           {/* 2. Stage 1 Details Box (Image #21 middle section) */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-gray-850 border border-gray-200 dark:border-gray-800 shadow-sm space-y-4">
+          <div className="p-5 rounded-2xl bg-white dark:bg-gray-800/70 border border-gray-200 dark:border-gray-800 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white">
                 Stage 1 Details
@@ -1659,7 +1701,7 @@ function InspectionDetailModal({
           </div>
 
           {/* 3. Checkpoints Audit Table (Image #21 bottom section) */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-gray-850 border border-gray-200 dark:border-gray-800 shadow-sm space-y-3">
+          <div className="p-5 rounded-2xl bg-white dark:bg-gray-800/70 border border-gray-200 dark:border-gray-800 shadow-sm space-y-3">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white">
               Checkpoints Audit ({parsedCheckpoints.length})
             </h3>

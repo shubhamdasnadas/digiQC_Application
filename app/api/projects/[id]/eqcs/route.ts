@@ -185,3 +185,32 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/projects/[id]/eqcs?eqc_id=...
+ */
+export async function DELETE(request: NextRequest, ctx: RouteContext) {
+  const { payload, response } = requireAuth(request);
+  if (!payload) return response;
+  const { id: projectId } = await ctx.params;
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const eqcId = searchParams.get('eqc_id') || searchParams.get('id');
+    if (!eqcId) {
+      return NextResponse.json({ error: 'Missing eqc_id parameter' }, { status: 400 });
+    }
+
+    await orgQuery(
+      payload.orgId ?? null,
+      `DELETE FROM eqcs WHERE id = $1 AND project_id = $2`,
+      [eqcId, projectId]
+    );
+
+    await touchProject(payload.orgId ?? null, projectId, payload.userId);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+  }
+}
+

@@ -51,6 +51,54 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
          ON CONFLICT (project_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
         [id, r.user_id, r.role ?? 'member']
       );
+
+      // Directly auto-sync team(s) belonging to this member to the project's teams
+      try {
+        const { rows: memberRows } = await orgQuery(
+          payload.orgId!,
+          `SELECT teams FROM members WHERE id = $1`,
+          [r.user_id]
+        );
+        if (memberRows.length > 0 && memberRows[0].teams) {
+          const teamNames = String(memberRows[0].teams)
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean);
+
+          for (const teamName of teamNames) {
+            // Find existing team in teams table or create it
+            const { rows: existingTeams } = await orgQuery(
+              payload.orgId!,
+              `SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+              [teamName]
+            );
+
+            let teamId = existingTeams[0]?.id;
+            if (!teamId) {
+              const { rows: newTeam } = await orgQuery(
+                payload.orgId!,
+                `INSERT INTO teams (organization_id, name, type)
+                 VALUES ($1, $2, 'inspection')
+                 RETURNING id`,
+                [payload.orgId, teamName]
+              );
+              teamId = newTeam[0]?.id;
+            }
+
+            if (teamId) {
+              await orgQuery(
+                payload.orgId!,
+                `INSERT INTO project_teams (project_id, team_id)
+                 VALUES ($1, $2)
+                 ON CONFLICT (project_id, team_id) DO NOTHING`,
+                [id, teamId]
+              );
+            }
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Could not auto-sync member teams:', syncErr);
+      }
     }
     await touchProject(payload.orgId!, id, payload.userId);
     return NextResponse.json({ success: true });

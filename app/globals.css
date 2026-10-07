@@ -71,3 +71,50 @@
 .count-animate {
   animation: countUp 0.6s ease-out forwards;
 }
+
+/* Google Maps Autocomplete Dropdown */
+.pac-container {
+  z-index: 99999 !important;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  font-family: inherit;
+  margin-top: 4px;
+}
+.pac-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.pac-item:hover {
+  background-color: #f3f4f6;
+}
+.pac-item-query {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+.pac-matched {
+  font-weight: 700;
+}
+
+.dark .pac-container {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #f3f4f6;
+}
+.dark .pac-item {
+  border-color: #374151;
+  color: #9ca3af;
+}
+.dark .pac-item:hover {
+  background-color: #374151;
+}
+.dark .pac-item-query {
+  color: #f9fafb;
+}
+.dark .pac-matched {
+  color: #2dd4bf;
+}

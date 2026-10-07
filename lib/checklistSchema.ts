@@ -19,6 +19,7 @@ export async function ensureChecklistSchema(_orgId?: string) {
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         library_checklist_id uuid NOT NULL REFERENCES public.library_checklists(id) ON DELETE CASCADE,
         sr_no integer NOT NULL DEFAULT 1,
+        "index" integer NOT NULL DEFAULT 1,
         name text NOT NULL,
         witness_required boolean DEFAULT false,
         drawing_required boolean DEFAULT false,
@@ -55,6 +56,7 @@ export async function ensureChecklistSchema(_orgId?: string) {
       ALTER TABLE public.library_stages ADD COLUMN IF NOT EXISTS witness_required boolean DEFAULT false;
       ALTER TABLE public.library_stages ADD COLUMN IF NOT EXISTS drawing_required boolean DEFAULT false;
       ALTER TABLE public.library_stages ADD COLUMN IF NOT EXISTS sr_no integer DEFAULT 1;
+      ALTER TABLE public.library_stages ADD COLUMN IF NOT EXISTS "index" integer DEFAULT 1;
 
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS input_type text DEFAULT 'yes_no';
       ALTER TABLE public.library_checkpoints ADD COLUMN IF NOT EXISTS photo_required boolean DEFAULT false;

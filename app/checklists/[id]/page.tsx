@@ -68,14 +68,24 @@ export default function ChecklistDetail() {
     }, [id]);
 
     const handleReorderStages = async (newStages: ChecklistStage[]) => {
-        const stageIds = newStages.map(s => s.id);
-        setStages(newStages);
+        // Assign 1-based index to every stage (1st position: index 1, 2nd position: index 2, etc.)
+        const updatedStages = newStages.map((s, idx) => ({
+            ...s,
+            index: idx + 1,
+            sr_no: idx + 1,
+        }));
+        setStages(updatedStages);
         setSaving(true);
         try {
             await fetch(`/api/checklists/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ reorder_stages: stageIds }),
+                body: JSON.stringify({
+                    reorder_stages: updatedStages.map((s) => ({
+                        id: s.id,
+                        index: s.index,
+                    })),
+                }),
             });
         } catch (error) {
             console.error('Error reordering stages:', error);
@@ -190,9 +200,14 @@ export default function ChecklistDetail() {
 
     // Native Drag and Drop Handlers for Stages
     const [draggedStageIdx, setDraggedStageIdx] = useState<number | null>(null);
+    const [dragOverStageIdx, setDragOverStageIdx] = useState<number | null>(null);
 
     const onDragStartStage = (idx: number) => setDraggedStageIdx(idx);
-    const onDragOverStage = (e: React.DragEvent) => e.preventDefault();
+    const onDragOverStage = (e: React.DragEvent, idx: number) => {
+        e.preventDefault();
+        if (dragOverStageIdx !== idx) setDragOverStageIdx(idx);
+    };
+    const onDragLeaveStage = () => setDragOverStageIdx(null);
     const onDropStage = (idx: number) => {
         if (draggedStageIdx === null) return;
         const newStages = [...stages];
@@ -200,6 +215,11 @@ export default function ChecklistDetail() {
         newStages.splice(idx, 0, removed);
         handleReorderStages(newStages);
         setDraggedStageIdx(null);
+        setDragOverStageIdx(null);
+    };
+    const onDragEndStage = () => {
+        setDraggedStageIdx(null);
+        setDragOverStageIdx(null);
     };
 
     // Native Drag and Drop Handlers for Checkpoints
@@ -334,10 +354,18 @@ export default function ChecklistDetail() {
                                 key={stage.id}
                                 draggable
                                 onDragStart={() => onDragStartStage(idx)}
-                                onDragOver={onDragOverStage}
+                                onDragOver={(e) => onDragOverStage(e, idx)}
+                                onDragLeave={onDragLeaveStage}
+                                onDragEnd={onDragEndStage}
                                 onDrop={() => onDropStage(idx)}
                                 onClick={() => setActiveStageId(stage.id)}
-                                className={`group flex items-center gap-3 py-2.5 px-2 rounded-lg cursor-pointer transition-all ${activeStageId === stage.id
+                                className={`group flex items-center gap-3 py-2.5 px-2 rounded-lg cursor-pointer transition-all ${
+                                    draggedStageIdx === idx ? 'opacity-40 scale-[0.98]' : ''
+                                } ${
+                                    dragOverStageIdx === idx && draggedStageIdx !== idx
+                                        ? 'border-t-2 border-orange-500 bg-orange-50/50 dark:bg-orange-950/20'
+                                        : ''
+                                } ${activeStageId === stage.id
                                     ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-semibold'
                                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 hover:text-gray-900 dark:hover:text-white'
                                     }`}
