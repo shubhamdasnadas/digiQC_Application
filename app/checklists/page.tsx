@@ -239,7 +239,7 @@ export default function Checklists() {
             <h3 className="font-semibold text-gray-900 dark:text-white">Checklists Table</h3>
             <button
               onClick={() => setShowTable(!showTable)}
-              className="text-orange-500 dark:text-orange-400 text-xs font-medium hover:underline flex items-center gap-1"
+              className="text-teal-600 dark:text-teal-400 text-xs font-medium hover:underline flex items-center gap-1"
             >
               <ChevronDown size={14} className={`transition-transform ${showTable ? 'rotate-180' : ''}`} />
               {showTable ? 'Hide' : 'Show'} Table
@@ -288,7 +288,7 @@ export default function Checklists() {
                               e.stopPropagation();
                               setEditingChecklist(c);
                             }}
-                            className="p-1 hover:text-orange-500 transition-colors"
+                            className="p-1 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
                             title="Edit"
                           >
                             <Edit2 size={14} />
@@ -296,7 +296,7 @@ export default function Checklists() {
                           <button
                             type="button"
                             onClick={(e) => handleCopy(c, e)}
-                            className="p-1 hover:text-orange-500 transition-colors"
+                            className="p-1 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
                             title="Copy"
                           >
                             <Copy size={14} />
@@ -350,7 +350,7 @@ export default function Checklists() {
                   </label>
                   <input
                     required
-                    className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 transition-all"
                     placeholder="Enter Name"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -364,7 +364,7 @@ export default function Checklists() {
                   <div className="relative">
                     <select
                       required
-                      className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none transition-all"
+                      className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 appearance-none transition-all"
                       value={form.uom}
                       onChange={e => setForm(f => ({ ...f, uom: e.target.value }))}
                     >
@@ -385,7 +385,7 @@ export default function Checklists() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reference Number</label>
                   <input
-                    className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 transition-all"
                     placeholder="Reference Number"
                     value={form.reference_number}
                     onChange={e => setForm(f => ({ ...f, reference_number: e.target.value }))}
@@ -404,7 +404,7 @@ export default function Checklists() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+                  className="px-5 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={16} className="animate-spin" /> : null}
                   Create Checklist

@@ -64,6 +64,7 @@ export interface Member {
   phone: string;
   access_type: string;
   active: boolean;
+  status?: string;
   default_role: string;
   teams: string;
   active_projects: string;

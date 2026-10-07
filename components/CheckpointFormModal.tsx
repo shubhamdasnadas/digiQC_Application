@@ -218,7 +218,7 @@ export default function CheckpointFormModal({
                                         questionRef.current.innerHTML = e.target.value;
                                     }
                                 }}
-                                className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                                className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 transition-all"
                                 placeholder="e.g. Foundation Level Check"
                             />
                         </div>
@@ -226,7 +226,7 @@ export default function CheckpointFormModal({
                             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
                                 Checklist Point Details / Question
                             </label>
-                            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-orange-500">
+                            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-teal-500">
                                 <div className="flex items-center gap-1 p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                                     <button type="button" onClick={() => executeCommand('bold')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><Bold size={14} /></button>
                                     <button type="button" onClick={() => executeCommand('italic')} className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-400"><Italic size={14} /></button>
@@ -260,7 +260,7 @@ export default function CheckpointFormModal({
                                 <select
                                     value={form.input_type}
                                     onChange={(e) => setForm({ ...form, input_type: e.target.value })}
-                                    className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 appearance-none px-3"
+                                    className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 appearance-none px-3"
                                 >
                                     <option value="yes_no">Yes/No</option>
                                     <option value="options">Options</option>
@@ -274,7 +274,7 @@ export default function CheckpointFormModal({
                             <button
                                 type="button"
                                 onClick={() => setForm(f => ({ ...f, photo_required: !f.photo_required }))}
-                                className={`w-11 h-6 rounded-full transition-colors relative ${form.photo_required ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}`}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${form.photo_required ? 'bg-teal-600' : 'bg-gray-200 dark:bg-gray-700'}`}
                             >
                                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${form.photo_required ? 'left-6' : 'left-1'}`} />
                             </button>
@@ -284,7 +284,7 @@ export default function CheckpointFormModal({
                             <button
                                 type="button"
                                 onClick={() => setForm(f => ({ ...f, remark_required: !f.remark_required }))}
-                                className={`w-11 h-6 rounded-full transition-colors relative ${form.remark_required ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}`}
+                                className={`w-11 h-6 rounded-full transition-colors relative ${form.remark_required ? 'bg-teal-600' : 'bg-gray-200 dark:bg-gray-700'}`}
                             >
                                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${form.remark_required ? 'left-6' : 'left-1'}`} />
                             </button>
@@ -303,7 +303,7 @@ export default function CheckpointFormModal({
                                                 type="checkbox"
                                                 checked={opt.qc_fail}
                                                 onChange={(e) => updateOption(idx, 'qc_fail', e.target.checked)}
-                                                className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                                                className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                                             />
                                             <span className="text-xs text-gray-500 dark:text-gray-400">Mark for QC fail</span>
                                         </div>
@@ -323,7 +323,7 @@ export default function CheckpointFormModal({
                                             type="text"
                                             value={opt.value}
                                             onChange={(e) => updateOption(idx, 'value', e.target.value)}
-                                            className="flex-1 p-2 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 px-3"
+                                            className="flex-1 p-2 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 px-3"
                                             placeholder="Enter value"
                                         />
                                         <div className="flex items-center gap-2 shrink-0">
@@ -331,7 +331,7 @@ export default function CheckpointFormModal({
                                                 type="checkbox"
                                                 checked={opt.qc_fail}
                                                 onChange={(e) => updateOption(idx, 'qc_fail', e.target.checked)}
-                                                className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                                                className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                                             />
                                             <span className="text-xs text-gray-500 dark:text-gray-400">QC Fail</span>
                                         </div>
@@ -356,7 +356,7 @@ export default function CheckpointFormModal({
                                 <select
                                     value={form.numeric_condition.operator}
                                     onChange={(e) => updateNumericCondition('operator', e.target.value)}
-                                    className="p-1.5 border border-orange-400 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500 px-2"
+                                    className="p-1.5 border border-teal-400 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 px-2"
                                 >
                                     {['<=', '>=', '=', '<', '>'].map(op => (
                                         <option key={op} value={op}>{op}</option>
@@ -366,7 +366,7 @@ export default function CheckpointFormModal({
                                     type="number"
                                     value={form.numeric_condition.value}
                                     onChange={(e) => updateNumericCondition('value', e.target.value)}
-                                    className="p-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-xs outline-none focus:ring-2 focus:ring-orange-500 w-28 px-2"
+                                    className="p-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-xs outline-none focus:ring-2 focus:ring-teal-500 w-28 px-2"
                                     placeholder="Number"
                                 />
                                 <span className="text-xs text-gray-600 dark:text-gray-400">then,</span>
@@ -377,7 +377,7 @@ export default function CheckpointFormModal({
                                             name="qc_result"
                                             checked={form.numeric_condition.qc_result === 'fail'}
                                             onChange={() => updateNumericCondition('qc_result', 'fail')}
-                                            className="w-3.5 h-3.5 text-orange-500 focus:ring-orange-500"
+                                            className="w-3.5 h-3.5 text-teal-600 focus:ring-teal-500"
                                         />
                                         <span>QC Fail</span>
                                     </label>
@@ -387,7 +387,7 @@ export default function CheckpointFormModal({
                                             name="qc_result"
                                             checked={form.numeric_condition.qc_result === 'pass'}
                                             onChange={() => updateNumericCondition('qc_result', 'pass')}
-                                            className="w-3.5 h-3.5 text-orange-500 focus:ring-orange-500"
+                                            className="w-3.5 h-3.5 text-teal-600 focus:ring-teal-500"
                                         />
                                         <span>QC Pass</span>
                                     </label>
@@ -409,7 +409,7 @@ export default function CheckpointFormModal({
                         <button
                             type="submit"
                             disabled={saving}
-                            className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                            className="px-6 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
                         >
                             {saving ? <Loader2 size={16} className="animate-spin" /> : null}
                             {checkpoint ? 'Save Changes' : 'Add Item'}

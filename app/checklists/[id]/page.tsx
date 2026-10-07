@@ -321,7 +321,7 @@ export default function ChecklistDetail() {
                     </button>
                     <button
                         onClick={() => setIsEditModalOpen(true)}
-                        className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-sm font-medium transition-colors"
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-sm font-medium transition-colors shadow-sm"
                     >
                         <Edit3 size={16} /> Edit
                     </button>
@@ -338,7 +338,7 @@ export default function ChecklistDetail() {
                                 setEditingStage(null);
                                 setIsStageModalOpen(true);
                             }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-full text-xs font-medium hover:bg-slate-800 transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-xs font-medium transition-colors shadow-sm"
                         >
                             <Plus size={14} /> Add
                         </button>
@@ -363,10 +363,10 @@ export default function ChecklistDetail() {
                                     draggedStageIdx === idx ? 'opacity-40 scale-[0.98]' : ''
                                 } ${
                                     dragOverStageIdx === idx && draggedStageIdx !== idx
-                                        ? 'border-t-2 border-orange-500 bg-orange-50/50 dark:bg-orange-950/20'
+                                        ? 'border-t-2 border-teal-500 bg-teal-50/50 dark:bg-teal-950/20'
                                         : ''
                                 } ${activeStageId === stage.id
-                                    ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-semibold'
+                                    ? 'bg-teal-50 dark:bg-teal-950/30 text-teal-600 dark:text-teal-400 font-semibold'
                                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 hover:text-gray-900 dark:hover:text-white'
                                     }`}
                             >
@@ -380,7 +380,7 @@ export default function ChecklistDetail() {
                                             setEditingStage(stage);
                                             setIsStageModalOpen(true);
                                         }}
-                                        className="p-1 hover:text-orange-500 rounded transition-colors"
+                                        className="p-1 hover:text-teal-500 rounded transition-colors"
                                         title="Edit Stage"
                                     >
                                         <Pencil size={13} />
@@ -423,7 +423,7 @@ export default function ChecklistDetail() {
                                             setEditingCheckpoint(null);
                                             setIsCheckpointModalOpen(true);
                                         }}
-                                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-xs font-medium transition-colors shadow-sm"
+                                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-xs font-medium transition-colors shadow-sm"
                                     >
                                         <Plus size={14} /> Item
                                     </button>
@@ -434,14 +434,14 @@ export default function ChecklistDetail() {
                             <div className="flex items-center gap-8 border-b border-gray-100 dark:border-gray-800 pb-4">
                                 <div className="relative">
                                     <span className="text-sm font-medium text-gray-900 dark:text-white">Stage Requirements</span>
-                                    <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-orange-500 rounded-full" />
+                                    <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-teal-500 rounded-full" />
                                 </div>
                                 <label className="flex items-center gap-2 cursor-pointer group">
                                     <input
                                         type="checkbox"
                                         checked={!!activeStage.witness_required}
                                         onChange={(e) => handleToggleStageRequirement('witness_required', e.target.checked)}
-                                        className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
+                                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
                                     />
                                     <span className="text-sm text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                                         Witness Required
@@ -452,7 +452,7 @@ export default function ChecklistDetail() {
                                         type="checkbox"
                                         checked={!!activeStage.drawing_required}
                                         onChange={(e) => handleToggleStageRequirement('drawing_required', e.target.checked)}
-                                        className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
+                                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
                                     />
                                     <span className="text-sm text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                                         Drawing Required
@@ -531,7 +531,7 @@ export default function ChecklistDetail() {
                                                                 setEditingCheckpoint(cp);
                                                                 setIsCheckpointModalOpen(true);
                                                             }}
-                                                            className="p-1 hover:text-orange-500 rounded transition-colors"
+                                                            className="p-1 hover:text-teal-600 dark:hover:text-teal-400 rounded transition-colors"
                                                             title="Edit Checkpoint"
                                                         >
                                                             <Pencil size={14} />
@@ -569,7 +569,7 @@ export default function ChecklistDetail() {
 
             {saving && (
                 <div className="fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-2 rounded-full text-xs flex items-center gap-2 animate-bounce shadow-lg">
-                    <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+                    <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse"></div>
                     Saving changes...
                 </div>
             )}

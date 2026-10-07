@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
         // Update member active status and updated_at timestamp in public.members
         try {
             await pool.query(
-                'UPDATE public.members SET active = true, updated_at = NOW() WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))',
+                "UPDATE public.members SET status = 'active', active = true, updated_at = NOW() WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))",
                 [verifiedEmail]
             );
         } catch (memErr) {

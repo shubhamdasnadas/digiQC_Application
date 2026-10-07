@@ -10,15 +10,16 @@ import {
     Pencil,
     CheckCircle2,
     XCircle,
-    Rocket,
     X,
     Loader2,
     Download,
+    Rocket,
 } from 'lucide-react';
-import { Checklist, ChecklistStage, Checkpoint, ProjectMember, ProjectTeam } from '@/lib/types';
+import { Checklist, ChecklistStage, Checkpoint } from '@/lib/types';
 import { exportToXlsx } from '@/lib/excelExport';
 import StageFormModal from '@/components/StageFormModal';
 import CheckpointFormModal from '@/components/CheckpointFormModal';
+import LiveChecklistModal from '@/components/LiveChecklistModal';
 
 export default function ProjectChecklistDetail() {
     const params = useParams();
@@ -302,7 +303,7 @@ export default function ProjectChecklistDetail() {
                     </button>
                     <button
                         onClick={() => setIsLiveModalOpen(true)}
-                        className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-sm font-medium transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-sm font-medium transition-colors shadow-sm"
                     >
                         <Rocket size={16} /> Go Live
                     </button>
@@ -319,7 +320,7 @@ export default function ProjectChecklistDetail() {
                                 setEditingStage(null);
                                 setIsStageModalOpen(true);
                             }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-full text-xs font-medium hover:bg-slate-800 transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-xs font-medium transition-colors shadow-sm"
                         >
                             <Plus size={14} /> Add
                         </button>
@@ -339,7 +340,7 @@ export default function ProjectChecklistDetail() {
                                 onDrop={() => onDropStage(idx)}
                                 onClick={() => setActiveStageId(stage.id)}
                                 className={`group flex items-center gap-3 py-2.5 px-2 rounded-lg cursor-pointer transition-all ${activeStageId === stage.id
-                                    ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-semibold'
+                                    ? 'bg-teal-50 dark:bg-teal-950/30 text-teal-600 dark:text-teal-400 font-semibold'
                                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 hover:text-gray-900 dark:hover:text-white'
                                     }`}
                             >
@@ -353,7 +354,7 @@ export default function ProjectChecklistDetail() {
                                             setEditingStage(stage);
                                             setIsStageModalOpen(true);
                                         }}
-                                        className="p-1 hover:text-orange-500 rounded transition-colors"
+                                        className="p-1 hover:text-teal-500 rounded transition-colors"
                                         title="Edit Stage"
                                     >
                                         <Pencil size={13} />
@@ -396,7 +397,7 @@ export default function ProjectChecklistDetail() {
                                             setEditingCheckpoint(null);
                                             setIsCheckpointModalOpen(true);
                                         }}
-                                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full text-xs font-medium transition-colors shadow-sm"
+                                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-full text-xs font-medium transition-colors shadow-sm"
                                     >
                                         <Plus size={14} /> Item
                                     </button>
@@ -407,14 +408,14 @@ export default function ProjectChecklistDetail() {
                             <div className="flex items-center gap-8 border-b border-gray-100 dark:border-gray-800 pb-4">
                                 <div className="relative">
                                     <span className="text-sm font-medium text-gray-900 dark:text-white">Stage Requirements</span>
-                                    <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-orange-500 rounded-full" />
+                                    <div className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-teal-500 rounded-full" />
                                 </div>
                                 <label className="flex items-center gap-2 cursor-pointer group">
                                     <input
                                         type="checkbox"
                                         checked={!!activeStage.witness_required}
                                         onChange={(e) => handleToggleStageRequirement('witness_required', e.target.checked)}
-                                        className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
+                                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
                                     />
                                     <span className="text-sm text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                                         Witness Required
@@ -425,7 +426,7 @@ export default function ProjectChecklistDetail() {
                                         type="checkbox"
                                         checked={!!activeStage.drawing_required}
                                         onChange={(e) => handleToggleStageRequirement('drawing_required', e.target.checked)}
-                                        className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
+                                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
                                     />
                                     <span className="text-sm text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                                         Drawing Required
@@ -504,7 +505,7 @@ export default function ProjectChecklistDetail() {
                                                                 setEditingCheckpoint(cp);
                                                                 setIsCheckpointModalOpen(true);
                                                             }}
-                                                            className="p-1 hover:text-orange-500 rounded transition-colors"
+                                                            className="p-1 hover:text-teal-600 dark:hover:text-teal-400 rounded transition-colors"
                                                             title="Edit Checkpoint"
                                                         >
                                                             <Pencil size={14} />
@@ -542,7 +543,7 @@ export default function ProjectChecklistDetail() {
 
             {saving && (
                 <div className="fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-2 rounded-full text-xs flex items-center gap-2 animate-bounce shadow-lg">
-                    <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+                    <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse"></div>
                     Saving changes...
                 </div>
             )}
@@ -572,6 +573,7 @@ export default function ProjectChecklistDetail() {
 
             {isLiveModalOpen && checklist && (
                 <LiveChecklistModal
+                    isOpen={isLiveModalOpen}
                     projectId={projectId}
                     checklist={checklist}
                     onClose={() => setIsLiveModalOpen(false)}
@@ -581,177 +583,6 @@ export default function ProjectChecklistDetail() {
                     }}
                 />
             )}
-        </div>
-    );
-}
-
-function LiveChecklistModal({
-    projectId, checklist, onClose, onSuccess,
-}: { projectId: string; checklist: Checklist; onClose: () => void; onSuccess: () => void; }) {
-    const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
-    const [projectTeams, setProjectTeams] = useState<ProjectTeam[]>([]);
-    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-    const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
-    const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
-    const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState('');
-
-    useEffect(() => {
-        const load = async () => {
-            setLoading(true);
-            const [mRes, tRes] = await Promise.all([
-                fetch(`/api/projects/${projectId}/members`),
-                fetch(`/api/projects/${projectId}/teams`),
-            ]);
-            const m = await mRes.json();
-            const t = await tRes.json();
-            setProjectMembers(Array.isArray(m) ? m : []);
-            setProjectTeams(Array.isArray(t) ? t : []);
-            setLoading(false);
-        };
-        load();
-    }, [projectId]);
-
-    const selectedTeamNames = projectTeams
-        .filter(t => selectedTeamIds.includes(t.team_id))
-        .map(t => t.team_name);
-
-    const availableMembers = projectMembers.filter(m =>
-        (m.user_teams || '').split(',').map(t => t.trim()).some(t => selectedTeamNames.includes(t))
-    );
-
-    const toggleUser = (id: string) => {
-        setSelectedUserIds(prev => prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]);
-    };
-
-    const toggleTeam = (id: string) => {
-        setSelectedTeamIds(prev => {
-            const next = prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id];
-            const nextTeamNames = projectTeams.filter(t => next.includes(t.team_id)).map(t => t.team_name);
-            const stillAvailable = new Set(
-                projectMembers
-                    .filter(m => (m.user_teams || '').split(',').map(t => t.trim()).some(t => nextTeamNames.includes(t)))
-                    .map(m => m.user_id)
-            );
-            setSelectedUserIds(u => u.filter(uid => stillAvailable.has(uid)));
-            return next;
-        });
-    };
-
-    const submit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (selectedUserIds.length === 0) { setError('Select at least one user.'); return; }
-        if (selectedTeamIds.length === 0) { setError('Select at least one team.'); return; }
-        setSaving(true);
-        setError('');
-        try {
-            const res = await fetch(`/api/projects/${projectId}/eqcs`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    checklist_id: checklist.id,
-                    assigned_user_ids: selectedUserIds,
-                    assigned_team_ids: selectedTeamIds,
-                }),
-            });
-            if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to go live'); }
-            onSuccess();
-        } catch (e) { setError((e as Error).message); }
-        finally { setSaving(false); }
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60 glass" onClick={onClose} />
-            <div className="relative bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-scale-in">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">Assign & Go Live</h3>
-                    <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"><X size={16} /></button>
-                </div>
-                <form onSubmit={submit} className="space-y-4">
-                    {/* Teams Dropdown */}
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Teams *</label>
-                        <div className="relative">
-                            <button
-                                type="button"
-                                onClick={() => { setIsTeamDropdownOpen(!isTeamDropdownOpen); setIsUserDropdownOpen(false); }}
-                                className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-left text-sm bg-white dark:bg-gray-800 flex items-center justify-between"
-                            >
-                                <span className={selectedTeamIds.length ? 'text-gray-900 dark:text-white' : 'text-gray-400'}>
-                                    {selectedTeamIds.length ? `${selectedTeamIds.length} team(s) selected` : 'Select teams'}
-                                </span>
-                            </button>
-                            {isTeamDropdownOpen && (
-                                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg max-h-48 overflow-y-auto p-2">
-                                    {projectTeams.map(t => (
-                                        <label key={t.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg cursor-pointer text-sm">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedTeamIds.includes(t.team_id)}
-                                                onChange={() => toggleTeam(t.team_id)}
-                                                className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-                                            />
-                                            <span className="text-gray-800 dark:text-gray-200">{t.team_name}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Users Dropdown */}
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Users *</label>
-                        <div className="relative">
-                            <button
-                                type="button"
-                                onClick={() => { setIsUserDropdownOpen(!isUserDropdownOpen); setIsTeamDropdownOpen(false); }}
-                                className="w-full p-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-left text-sm bg-white dark:bg-gray-800 flex items-center justify-between"
-                            >
-                                <span className={selectedUserIds.length ? 'text-gray-900 dark:text-white' : 'text-gray-400'}>
-                                    {selectedUserIds.length ? `${selectedUserIds.length} user(s) selected` : 'Select users'}
-                                </span>
-                            </button>
-                            {isUserDropdownOpen && (
-                                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg max-h-48 overflow-y-auto p-2">
-                                    {availableMembers.map(m => (
-                                        <label key={m.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg cursor-pointer text-sm">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedUserIds.includes(m.user_id)}
-                                                onChange={() => toggleUser(m.user_id)}
-                                                className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-                                            />
-                                            <div>
-                                                <p className="text-gray-800 dark:text-gray-200">{m.user_name || m.user_email}</p>
-                                                <p className="text-[10px] text-gray-400">{m.user_teams}</p>
-                                            </div>
-                                        </label>
-                                    ))}
-                                    {availableMembers.length === 0 && (
-                                        <p className="text-xs text-gray-400 p-2">Select a team first to see members</p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {error && <p className="text-xs text-red-500">{error}</p>}
-
-                    <div className="flex justify-end gap-2 pt-2">
-                        <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-                            Cancel
-                        </button>
-                        <button type="submit" disabled={saving} className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 flex items-center gap-1.5 disabled:opacity-50">
-                            {saving ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
-                            Make Live
-                        </button>
-                    </div>
-                </form>
-            </div>
         </div>
     );
 }

@@ -172,7 +172,7 @@ export default function StageFormModal({
                         <button
                             type="submit"
                             disabled={saving}
-                            className="flex-1 py-2.5 px-4 rounded-xl text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                            className="flex-1 py-2.5 px-4 rounded-xl text-sm font-medium text-white bg-teal-500 hover:bg-teal-600 transition-colors flex items-center justify-center gap-2 shadow-sm"
                         >
                             {saving ? <Loader2 size={16} className="animate-spin" /> : null}
                             {stage ? 'Save Changes' : 'Add'}

@@ -140,7 +140,7 @@ export async function sendPasswordSetupEmail(toEmail: string, userName: string, 
         <div class="logo-badge">✓</div>
       </div>
       <h1 class="title">${isUpdate ? 'Update Your Valid8 Password' : 'Set Up Your Valid8 Password'}</h1>
-      <p class="subtitle">Hello <strong>${userName || 'User'}</strong>, ${isUpdate ? 'your email address has been updated in Valid8. Please choose an option below to set or update your account password.' : 'you have been invited to Valid8. Click below to create your password and access your account.'}</p>
+      <p class="subtitle">Hello <strong>${userName || 'User'}</strong>, ${isUpdate ? 'your user account in Valid8 has been updated. Please choose an option below to set or update your account password.' : 'you have been invited to Valid8. Click below to create your password and access your account.'}</p>
 
       <div class="btn-container">
         <a href="${createLink}" class="btn-primary">Create Password</a>

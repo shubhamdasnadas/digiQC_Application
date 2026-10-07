@@ -12,7 +12,20 @@ export async function GET(request: NextRequest) {
   await ensureMemberSchema();
 
   try {
-    const { rows } = await orgQuery(payload.orgId!, 'SELECT * FROM members ORDER BY created_at DESC');
+    const { rows } = await orgQuery(
+      payload.orgId!,
+      `SELECT m.*,
+         CASE
+           WHEN m.active = false THEN 'Inactive'
+           WHEN LOWER(COALESCE(m.status, 'pending')) = 'pending' THEN 'Pending'
+           WHEN u.password_hash IS NOT NULL AND LENGTH(TRIM(u.password_hash)) > 10 THEN 'Active'
+           WHEN m.status IS NOT NULL AND LOWER(m.status) = 'active' THEN 'Active'
+           ELSE 'Pending'
+         END as status
+       FROM members m
+       LEFT JOIN public.users u ON LOWER(TRIM(m.email)) = LOWER(TRIM(u.email))
+       ORDER BY m.created_at DESC`
+    );
     return NextResponse.json(rows);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
@@ -54,9 +67,8 @@ export async function PUT(request: NextRequest) {
     const activeProjects = body.active_projects !== undefined ? String(body.active_projects).trim() : existing.active_projects;
     const inactiveProjects = body.inactive_projects !== undefined ? String(body.inactive_projects).trim() : existing.inactive_projects;
 
-    const oldEmail = (existing.email || '').toLowerCase().trim();
-    const newEmail = email.toLowerCase().trim();
-    const emailUpdated = newEmail !== '' && newEmail !== oldEmail;
+    // Reset member status to pending until the user verifies/updates their password via the sent email link
+    const newStatus = 'pending';
 
     await orgQuery(payload.orgId!,
       `UPDATE members
@@ -69,8 +81,9 @@ export async function PUT(request: NextRequest) {
            active = $7,
            active_projects = $8,
            inactive_projects = $9,
+           status = $10,
            updated_at = NOW()
-       WHERE id = $10`,
+       WHERE id = $11`,
       [
         name,
         email,
@@ -81,17 +94,22 @@ export async function PUT(request: NextRequest) {
         active,
         activeProjects,
         inactiveProjects,
+        newStatus,
         id
       ]
     );
 
+    const targetEmail = (email || existing.email || '').toLowerCase().trim();
     let emailSent = false;
-    if (emailUpdated && newEmail.includes('@')) {
+    let emailSentTo: string | null = null;
+
+    if (targetEmail && targetEmail.includes('@')) {
       try {
-        const token = signPasswordSetupToken(newEmail, id);
-        const setupLink = `${getBaseUrl(request)}/setpassword?token=${encodeURIComponent(token)}&email=${encodeURIComponent(newEmail)}`;
-        await sendPasswordSetupEmail(newEmail, name, setupLink, true);
+        const token = signPasswordSetupToken(targetEmail, id);
+        const setupLink = `${getBaseUrl(request)}/setpassword?token=${encodeURIComponent(token)}&email=${encodeURIComponent(targetEmail)}`;
+        await sendPasswordSetupEmail(targetEmail, name, setupLink, true);
         emailSent = true;
+        emailSentTo = targetEmail;
       } catch (mailErr) {
         console.error('Failed to send password setup email on edit member:', mailErr);
       }
@@ -100,7 +118,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       emailSent,
-      emailSentTo: emailSent ? email : null,
+      emailSentTo,
     });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
@@ -208,11 +226,11 @@ export async function POST(request: NextRequest) {
         // Insert new member
         await orgQuery(payload.orgId!,
           `INSERT INTO members (
-             organization_id, name, email, phone, access_type, active,
+             organization_id, name, email, phone, access_type, active, status,
              default_role, teams, active_projects, inactive_projects,
              created_at, updated_at
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+           VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, NOW(), NOW())`,
           [
             payload.orgId,
             name,

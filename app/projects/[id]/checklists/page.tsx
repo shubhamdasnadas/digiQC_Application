@@ -48,7 +48,7 @@ export default function ChecklistsTab() {
       render: (c) => (
         <button
           onClick={() => router.push(`/projects/${id}/checklists/${c.id}?name=${encodeURIComponent(c.name)}`)}
-          className="text-sm font-medium text-gray-900 dark:text-white hover:text-orange-500 dark:hover:text-orange-400 hover:underline transition-colors text-left"
+          className="text-sm font-medium text-gray-900 dark:text-white hover:text-teal-600 dark:hover:text-teal-400 hover:underline transition-colors text-left"
         >
           {c.name}
         </button>
@@ -72,7 +72,7 @@ export default function ChecklistsTab() {
         <div className="flex items-center justify-end gap-1">
           <button
             onClick={() => setEditing(c)}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-500 dark:hover:bg-orange-500/10 transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-teal-50 hover:text-teal-600 dark:hover:bg-teal-500/10 dark:hover:text-teal-400 transition-colors"
             title="Edit"
           >
             <Pencil size={13} />
@@ -395,14 +395,14 @@ function AddChecklistModal({
           <button
             type="button"
             onClick={() => setMode('existing')}
-            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'existing' ? 'bg-white dark:bg-gray-950 text-orange-500 dark:text-orange-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'existing' ? 'bg-white dark:bg-gray-950 text-teal-600 dark:text-teal-400 shadow-sm font-semibold' : 'text-gray-500 dark:text-gray-400'}`}
           >
             Existing Checklist
           </button>
           <button
             type="button"
             onClick={() => setMode('new')}
-            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'new' ? 'bg-white dark:bg-gray-950 text-orange-500 dark:text-orange-400 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+            className={`py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'new' ? 'bg-white dark:bg-gray-950 text-teal-600 dark:text-teal-400 shadow-sm font-semibold' : 'text-gray-500 dark:text-gray-400'}`}
           >
             New Checklist
           </button>
@@ -412,7 +412,7 @@ function AddChecklistModal({
           {mode === 'existing' ? (
             loadingLib ? (
               <div className="py-6 flex items-center justify-center text-xs text-gray-500 gap-2">
-                <Loader2 size={16} className="animate-spin text-orange-500" />
+                <Loader2 size={16} className="animate-spin text-teal-500" />
                 <span>Loading existing checklists…</span>
               </div>
             ) : libraryList.length > 0 ? (
@@ -440,7 +440,7 @@ function AddChecklistModal({
                           setSearch(c.name);
                           setShowResults(false);
                         }}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-100 dark:border-gray-800/50 last:border-0 ${selectedId === c.id ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-100 dark:border-gray-800/50 last:border-0 ${selectedId === c.id ? 'bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-300 font-medium' : 'text-gray-700 dark:text-gray-300'}`}
                       >
                         <div className="font-medium">{c.name}</div>
                         {c.reference_number && (
@@ -453,9 +453,9 @@ function AddChecklistModal({
                   </div>
                 )}
                 {selectedId && (
-                  <div className="mt-2 p-2.5 rounded-lg bg-orange-50/50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-xs flex items-center justify-between">
+                  <div className="mt-2 p-2.5 rounded-lg bg-teal-50/50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 text-xs flex items-center justify-between">
                     <div>
-                      <span className="font-medium text-orange-900 dark:text-orange-300">Selected: </span>
+                      <span className="font-medium text-teal-900 dark:text-teal-300">Selected: </span>
                       <span className="text-gray-700 dark:text-gray-300">{libraryList.find(c => c.id === selectedId)?.name}</span>
                     </div>
                   </div>

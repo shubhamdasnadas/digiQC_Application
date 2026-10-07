@@ -112,7 +112,8 @@ export default function Members() {
     const email = (m?.email || '').toLowerCase();
     const matchesSearch = !q || name.includes(q) || email.includes(q);
     const matchesAccess = filterAccessType === 'All' || m.access_type === filterAccessType;
-    const matchesStatus = filterStatus === 'All' || (filterStatus === 'Active' ? m.active : !m.active);
+    const memberStatus = (m.status || (m.active ? 'Active' : 'Inactive')).toLowerCase();
+    const matchesStatus = filterStatus === 'All' || filterStatus.toLowerCase() === memberStatus;
     const matchesTeam = filterTeam === 'All' || (m.teams || '').includes(filterTeam);
     return matchesSearch && matchesAccess && matchesStatus && matchesTeam;
   });
@@ -122,7 +123,7 @@ export default function Members() {
     Email: m.email,
     Phone: m.phone,
     'Access Type': m.access_type,
-    Status: m.active ? 'Active' : 'Inactive',
+    Status: m.status || (m.active ? 'Active' : 'Inactive'),
     Role: m.default_role,
     Team: m.teams,
     'Active Projects': m.active_projects,
@@ -191,6 +192,7 @@ export default function Members() {
             >
               <option value="All">All Status</option>
               <option value="Active">Active</option>
+              <option value="Pending">Pending</option>
               <option value="Inactive">Inactive</option>
             </select>
             <ChevronDown size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -226,7 +228,7 @@ export default function Members() {
           <input
             type="text"
             placeholder="Search members by name or email..."
-            className="input pl-9 pr-4 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-orange-500"
+            className="input pl-9 pr-4 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-teal-500"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
@@ -235,7 +237,7 @@ export default function Members() {
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <Loader2 size={32} className="text-orange-500 animate-spin" />
+          <Loader2 size={32} className="text-teal-500 animate-spin" />
           <p className="text-sm text-gray-500">Loading members list...</p>
         </div>
       ) : (
@@ -275,8 +277,14 @@ export default function Members() {
                       </div>
                     </td>
                     <td className="px-5 py-3">
-                      <span className={`badge ${m.active ? 'badge-active' : 'badge-on_hold'} text-xs`}>
-                        {m.active ? 'Active' : 'Inactive'}
+                      <span className={`badge ${
+                        m.status === 'Pending' || m.status === 'pending'
+                          ? 'badge-on_hold'
+                          : (m.status === 'Active' || m.status === 'active' || (m.active && !m.status))
+                            ? 'badge-active'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                      } text-xs`}>
+                        {m.status || (m.active ? 'Active' : 'Inactive')}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{m.default_role || 'User'}</td>

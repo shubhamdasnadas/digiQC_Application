@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, X, Loader2, Trash2, ChevronDown } from 'lucide-react';
+import { Plus, X, Loader2, Trash2, ChevronDown, Pencil } from 'lucide-react';
 import TabsPageShell from '@/components/TabsPageShell';
 import DataTable, { type Column } from '@/components/DataTable';
 import type { ProjectMember, Member, Team, EQC } from '@/lib/types';
@@ -15,6 +15,14 @@ const ROLE_TO_DB_ROLE: Record<typeof ROLES[number], string> = {
   'Inspector': 'inspector',
   'Auditor': 'approver',
   'Associate': 'member',
+};
+
+const DB_ROLE_TO_ROLE: Record<string, typeof ROLES[number]> = {
+  admin: 'Project Admin',
+  inspector: 'Inspector',
+  approver: 'Auditor',
+  member: 'Associate',
+  viewer: 'Associate',
 };
 
 const ROLE_DEFAULTS = {
@@ -37,6 +45,7 @@ export default function UsersTab() {
   const [projectTeams, setProjectTeams] = useState<ProjectTeamLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<ProjectMember | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -150,11 +159,26 @@ export default function UsersTab() {
       render: () => <span className="text-xs text-gray-500">—</span>,
     },
     {
-      key: 'actions', header: '',
+      key: 'actions',
+      header: '',
+      width: '80px',
       render: (m) => (
-        <button onClick={() => removeMember(m.user_id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10">
-          <Trash2 size={13} />
-        </button>
+        <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={() => setEditing(m)}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-teal-50 hover:text-teal-600 dark:hover:bg-teal-500/10 dark:hover:text-teal-400 transition-colors"
+            title="Edit User"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={() => removeMember(m.user_id)}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10 transition-colors"
+            title="Remove User"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       ),
     },
   ];
@@ -176,24 +200,70 @@ export default function UsersTab() {
       )}
 
       {showAdd && (
-        <AddMemberModal
+        <MemberFormModal
           projectId={id}
           available={available}
+          eqcs={eqcs}
           onClose={() => setShowAdd(false)}
           onSaved={() => { setShowAdd(false); load(); }}
+        />
+      )}
+
+      {editing && (
+        <MemberFormModal
+          projectId={id}
+          editingMember={editing}
+          available={allMembers}
+          eqcs={eqcs}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
         />
       )}
     </TabsPageShell>
   );
 }
 
-function AddMemberModal({
-  projectId, available, onClose, onSaved,
-}: { projectId: string; available: Member[]; onClose: () => void; onSaved: () => void; }) {
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [role, setRole] = useState<typeof ROLES[number]>('Project Admin');
-  const [permissions, setPermissions] = useState(ROLE_DEFAULTS['Project Admin']);
-  const [access, setAccess] = useState({ webAccess: 'Team', raiseInstruction: false });
+function MemberFormModal({
+  projectId,
+  available,
+  editingMember,
+  eqcs = [],
+  onClose,
+  onSaved,
+}: {
+  projectId: string;
+  available: Member[];
+  editingMember?: ProjectMember | null;
+  eqcs?: EQC[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!editingMember;
+
+  const [selectedUsers, setSelectedUsers] = useState<string[]>(() => {
+    return editingMember ? [editingMember.user_id] : [];
+  });
+
+  const [role, setRole] = useState<typeof ROLES[number]>(() => {
+    if (editingMember) {
+      return DB_ROLE_TO_ROLE[editingMember.role] || 'Project Admin';
+    }
+    return 'Project Admin';
+  });
+
+  const [permissions, setPermissions] = useState(() => {
+    const currentRole = editingMember ? (DB_ROLE_TO_ROLE[editingMember.role] || 'Project Admin') : 'Project Admin';
+    return ROLE_DEFAULTS[currentRole];
+  });
+
+  const [access, setAccess] = useState(() => {
+    const currentRole = editingMember ? (DB_ROLE_TO_ROLE[editingMember.role] || 'Project Admin') : 'Project Admin';
+    return {
+      webAccess: ROLE_DEFAULTS[currentRole].webAccess,
+      raiseInstruction: ROLE_DEFAULTS[currentRole].raiseInstruction,
+    };
+  });
+
   const [checklists, setChecklists] = useState<{ id: string; name: string }[]>([]);
   const [selectedChecklists, setSelectedChecklists] = useState<string[]>([]);
   const [rfis, setRfis] = useState<{ id: string; name: string }[]>([]);
@@ -223,7 +293,30 @@ function AddMemberModal({
         const cRes = await fetch('/api/checklists');
         if (cRes.ok) {
           const c = await cRes.json();
-          setChecklists(Array.isArray(c) ? c : []);
+          const chkList = Array.isArray(c) ? c : [];
+          setChecklists(chkList);
+
+          // If in edit mode, prefill user's assigned checklists from eqcs
+          if (editingMember) {
+            const assignedIds = new Set<string>();
+            eqcs.forEach((e) => {
+              if (e.assigned_user_ids?.includes(editingMember.user_id) && e.checklist_id) {
+                assignedIds.add(e.checklist_id);
+              }
+            });
+            // Also match by checklist name if eqc has checklist_name
+            const assignedNames = new Set(
+              eqcs
+                .filter((e) => e.assigned_user_ids?.includes(editingMember.user_id) && e.checklist_name)
+                .map((e) => e.checklist_name as string)
+            );
+            chkList.forEach((chk) => {
+              if (assignedNames.has(chk.name)) {
+                assignedIds.add(chk.id);
+              }
+            });
+            setSelectedChecklists(Array.from(assignedIds));
+          }
         }
       } catch (e) { console.error('Failed to fetch checklists', e); }
 
@@ -244,13 +337,13 @@ function AddMemberModal({
       } catch (e) { console.error('Failed to fetch teams', e); }
     };
     fetchData();
-  }, []);
+  }, [editingMember, eqcs]);
 
   useEffect(() => {
     setPermissions(ROLE_DEFAULTS[role]);
-    setAccess({ 
-      webAccess: ROLE_DEFAULTS[role].webAccess, 
-      raiseInstruction: ROLE_DEFAULTS[role].raiseInstruction 
+    setAccess({
+      webAccess: ROLE_DEFAULTS[role].webAccess,
+      raiseInstruction: ROLE_DEFAULTS[role].raiseInstruction
     });
   }, [role]);
 
@@ -259,7 +352,6 @@ function AddMemberModal({
     if (selectedUsers.length === 0) { setError('Select at least one user.'); return; }
     setSaving(true);
     try {
-      // In a real app, we'd send all this data to the backend
       const res = await fetch(`/api/projects/${projectId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -271,10 +363,9 @@ function AddMemberModal({
           rfi: selectedRfi,
         }),
       });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to assign'); }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to save'); }
 
-      // Any team a newly-assigned user belongs to (whether just one member or the
-      // whole team was picked) should show up on the project's Teams tab.
+      // Update team linkages for selected users
       const selectedMembers = available.filter(u => selectedUsers.includes(u.id));
       const teamNames = new Set(
         selectedMembers.flatMap(m => (m.teams || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean))
@@ -288,12 +379,27 @@ function AddMemberModal({
         });
       }
 
+      // Sync checklist assignments (EQCs) for selected users
+      if (selectedChecklists.length > 0) {
+        for (const chkId of selectedChecklists) {
+          await fetch(`/api/projects/${projectId}/eqcs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              checklist_id: chkId,
+              assigned_user_ids: selectedUsers,
+            }),
+          }).catch((err) => console.warn('EQC checklist sync warn:', err));
+        }
+      }
+
       onSaved();
     } catch (e) { setError((e as Error).message); }
     finally { setSaving(false); }
   };
 
   const toggleUser = (id: string) => {
+    if (isEdit) return; // In edit mode, user is locked to current member
     setSelectedUsers(prev => prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]);
   };
 
@@ -306,13 +412,13 @@ function AddMemberModal({
   };
 
   const toggleTeam = (team: string, teamMemberIds: string[]) => {
+    if (isEdit) return;
     setSelectedUsers(prev => {
       const allSelected = teamMemberIds.every(id => prev.includes(id));
       return allSelected
         ? prev.filter(id => !teamMemberIds.includes(id))
         : Array.from(new Set([...prev, ...teamMemberIds]));
     });
-    // Selecting a team should reveal its members rather than leaving the list collapsed.
     setOpenTeams(prev => new Set(prev).add(team));
   };
 
@@ -323,8 +429,7 @@ function AddMemberModal({
   const selectAllChecklists = () => setSelectedChecklists(checklists.map(c => c.id));
   const deselectAllChecklists = () => setSelectedChecklists([]);
 
-  // Group members by team for hierarchical view (a member with multiple comma-separated
-  // teams appears under each of them)
+  // Group members by team for hierarchical view
   const groupedUsers = available.reduce((acc, member) => {
     const teamNames = (member.teams || '').split(',').map(t => t.trim()).filter(Boolean);
     const groups = teamNames.length > 0 ? teamNames : ['Unassigned'];
@@ -340,89 +445,109 @@ function AddMemberModal({
       <div className="absolute inset-0 bg-black/60 glass" onClick={onClose} />
       <div className="relative card w-full max-w-2xl p-6 animate-scale-in max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold">Add Users to Project ({selectedUsers.length} Users Selected)</h2>
+          <h2 className="text-lg font-semibold">
+            {isEdit
+              ? `Edit User (${editingMember?.user_name || 'User'})`
+              : `Add Users to Project (${selectedUsers.length} Users Selected)`}
+          </h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"><X size={16} /></button>
         </div>
-        
+
         <form onSubmit={submit} className="space-y-6">
           {/* Users Selection */}
           <div className="relative">
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">* Users</label>
-            <div 
-              className={`input flex items-center justify-between cursor-pointer ${selectedUsers.length === 0 ? 'border-orange-500' : ''}`}
-              onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-            >
-              <span className="text-gray-400">{selectedUsers.length > 0 ? `${selectedUsers.length} Users Selected` : 'Select Users'}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-400"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></span>
-              </div>
-            </div>
-            {isUserDropdownOpen && (
-              <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
-                <div className="sticky -top-2 z-20 -mx-2 -mt-2 mb-2 px-2 pt-2 pb-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
-                  <input
-                    className="input w-full"
-                    placeholder="Search users..."
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                  />
+            {isEdit ? (
+              <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center text-xs text-white font-semibold shrink-0">
+                  {(editingMember?.user_name ?? '?').charAt(0).toUpperCase()}
                 </div>
-                {Object.entries(groupedUsers).map(([team, users]) => {
-                  const filteredUsers = users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase()));
-                  if (filteredUsers.length === 0) return null;
-                  const teamMemberIds = filteredUsers.map(u => u.id);
-                  const allSelected = teamMemberIds.every(mid => selectedUsers.includes(mid));
-                  const someSelected = !allSelected && teamMemberIds.some(mid => selectedUsers.includes(mid));
-                  const isCollapsed = !openTeams.has(team);
-                  return (
-                    <div key={team} className="mb-2">
-                      <div
-                        className="flex items-center gap-2 p-1 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
-                        onClick={() => toggleTeamOpen(team)}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={allSelected}
-                          ref={(el) => { if (el) el.indeterminate = someSelected; }}
-                          readOnly
-                          className="rounded text-teal-600"
-                          onClick={(e) => { e.stopPropagation(); toggleTeam(team, teamMemberIds); }}
-                        />
-                        <span className="flex-1">{team} - {filteredUsers.length}</span>
-                        <ChevronDown size={14} className={`text-gray-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
-                      </div>
-                      {!isCollapsed && (
-                        <div className="pl-6 space-y-1">
-                          {filteredUsers.map(u => (
-                            <div key={u.id} className="flex items-center gap-2 p-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer" onClick={() => toggleUser(u.id)}>
-                              <input type="checkbox" checked={selectedUsers.includes(u.id)} readOnly className="rounded text-teal-600" />
-                              <span className="text-xs text-gray-600 dark:text-gray-400">{u.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                    {editingMember?.user_name || 'User'}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate">
+                    {editingMember?.user_email || 'No email'} {editingMember?.user_teams ? `• ${editingMember.user_teams}` : ''}
+                  </p>
+                </div>
               </div>
+            ) : (
+              <>
+                <div
+                  className={`input flex items-center justify-between cursor-pointer ${selectedUsers.length === 0 ? 'border-teal-500' : ''}`}
+                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                >
+                  <span className="text-gray-400">{selectedUsers.length > 0 ? `${selectedUsers.length} Users Selected` : 'Select Users'}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></span>
+                  </div>
+                </div>
+                {isUserDropdownOpen && (
+                  <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
+                    <div className="sticky -top-2 z-20 -mx-2 -mt-2 mb-2 px-2 pt-2 pb-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
+                      <input
+                        className="input w-full"
+                        placeholder="Search users..."
+                        value={userSearch}
+                        onChange={(e) => setUserSearch(e.target.value)}
+                      />
+                    </div>
+                    {Object.entries(groupedUsers).map(([team, users]) => {
+                      const filteredUsers = users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase()));
+                      if (filteredUsers.length === 0) return null;
+                      const teamMemberIds = filteredUsers.map(u => u.id);
+                      const allSelected = teamMemberIds.every(mid => selectedUsers.includes(mid));
+                      const someSelected = !allSelected && teamMemberIds.some(mid => selectedUsers.includes(mid));
+                      const isCollapsed = !openTeams.has(team);
+                      return (
+                        <div key={team} className="mb-2">
+                          <div
+                            className="flex items-center gap-2 p-1 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
+                            onClick={() => toggleTeamOpen(team)}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={allSelected}
+                              ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                              readOnly
+                              className="rounded text-teal-600"
+                              onClick={(e) => { e.stopPropagation(); toggleTeam(team, teamMemberIds); }}
+                            />
+                            <span className="flex-1">{team} - {filteredUsers.length}</span>
+                            <ChevronDown size={14} className={`text-gray-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                          </div>
+                          {!isCollapsed && (
+                            <div className="pl-6 space-y-1">
+                              {filteredUsers.map(u => (
+                                <div key={u.id} className="flex items-center gap-2 p-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer" onClick={() => toggleUser(u.id)}>
+                                  <input type="checkbox" checked={selectedUsers.includes(u.id)} readOnly className="rounded text-teal-600" />
+                                  <span className="text-xs text-gray-600 dark:text-gray-400">{u.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
-
           {/* Role Selection */}
           <div className="relative">
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">* Role</label>
-            <div 
-              className={`input flex items-center justify-between cursor-pointer ${!role ? 'border-orange-500' : ''}`}
+            <div
+              className={`input flex items-center justify-between cursor-pointer ${!role ? 'border-teal-500' : ''}`}
               onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
             >
-              <span className={!role ? 'text-gray-400' : 'text-gray-900 dark:text-white'}>{role || 'Select Role'}</span>
+              <span className={!role ? 'text-gray-400' : 'text-gray-900 dark:text-white font-medium'}>{role || 'Select Role'}</span>
               <div className="flex items-center gap-2">
-                <span className="text-gray-400"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></span>
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                <ChevronDown size={14} className={`text-gray-400 transition-transform ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
               </div>
             </div>
             {isRoleDropdownOpen && (
-              <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
+              <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
                 <div className="sticky -top-2 z-20 -mx-2 -mt-2 mb-2 px-2 pt-2 pb-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
                   <input
                     className="input w-full"
@@ -432,9 +557,9 @@ function AddMemberModal({
                   />
                 </div>
                 {ROLES.filter(r => r.toLowerCase().includes(roleSearch.toLowerCase())).map(r => (
-                  <div 
-                    key={r} 
-                    className={`p-2 text-sm rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 ${role === r ? 'bg-teal-50 text-teal-700 font-medium' : 'text-gray-600 dark:text-gray-400'}`}
+                  <div
+                    key={r}
+                    className={`p-2 text-sm rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 ${role === r ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-medium' : 'text-gray-600 dark:text-gray-400'}`}
                     onClick={() => { setRole(r); setIsRoleDropdownOpen(false); }}
                   >
                     {r}
@@ -448,9 +573,9 @@ function AddMemberModal({
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Permissions</h3>
             <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center justify-between p-2 border rounded-lg">
+              <div className="flex items-center justify-between p-2 border border-gray-200 dark:border-gray-700 rounded-lg">
                 <span className="text-xs text-gray-600 dark:text-gray-400">Location</span>
-                <button 
+                <button
                   type="button"
                   onClick={() => setPermissions(p => ({ ...p, location: !p.location }))}
                   className={`w-10 h-5 rounded-full transition-colors relative ${permissions.location ? 'bg-teal-600' : 'bg-gray-300 dark:bg-gray-700'}`}
@@ -458,9 +583,9 @@ function AddMemberModal({
                   <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${permissions.location ? 'left-6' : 'left-1'}`} />
                 </button>
               </div>
-              <div className="flex items-center justify-between p-2 border rounded-lg">
+              <div className="flex items-center justify-between p-2 border border-gray-200 dark:border-gray-700 rounded-lg">
                 <span className="text-xs text-gray-600 dark:text-gray-400">Authentication</span>
-                <button 
+                <button
                   type="button"
                   onClick={() => setPermissions(p => ({ ...p, authentication: !p.authentication }))}
                   className={`w-10 h-5 rounded-full transition-colors relative ${permissions.authentication ? 'bg-teal-600' : 'bg-gray-300 dark:bg-gray-700'}`}
@@ -478,17 +603,17 @@ function AddMemberModal({
               <div className="space-y-2">
                 <span className="block text-xs text-gray-600 dark:text-gray-400">Web Access</span>
                 <div className="flex p-1 bg-gray-100 dark:bg-gray-800 rounded-lg w-fit">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setAccess(a => ({ ...a, webAccess: 'Team' }))}
-                    className={`px-3 py-1 text-xs rounded-md transition-all ${access.webAccess === 'Team' ? 'bg-white dark:bg-gray-700 shadow-sm text-teal-700 font-medium' : 'text-gray-500'}`}
+                    className={`px-3 py-1 text-xs rounded-md transition-all ${access.webAccess === 'Team' ? 'bg-white dark:bg-gray-700 shadow-sm text-teal-700 dark:text-teal-300 font-medium' : 'text-gray-500'}`}
                   >
                     Team
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setAccess(a => ({ ...a, webAccess: 'Project' }))}
-                    className={`px-3 py-1 text-xs rounded-md transition-all ${access.webAccess === 'Project' ? 'bg-white dark:bg-gray-700 shadow-sm text-teal-700 font-medium' : 'text-gray-500'}`}
+                    className={`px-3 py-1 text-xs rounded-md transition-all ${access.webAccess === 'Project' ? 'bg-white dark:bg-gray-700 shadow-sm text-teal-700 dark:text-teal-300 font-medium' : 'text-gray-500'}`}
                   >
                     Project
                   </button>
@@ -496,7 +621,7 @@ function AddMemberModal({
               </div>
               <div className="space-y-2">
                 <span className="block text-xs text-gray-600 dark:text-gray-400">Raise Instruction</span>
-                <button 
+                <button
                   type="button"
                   onClick={() => setAccess(a => ({ ...a, raiseInstruction: !a.raiseInstruction }))}
                   className={`w-10 h-5 rounded-full transition-colors relative ${access.raiseInstruction ? 'bg-teal-600' : 'bg-gray-300 dark:bg-gray-700'}`}
@@ -511,26 +636,25 @@ function AddMemberModal({
           <div className="relative">
             <div className="flex justify-between items-center mb-1.5">
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Checklist</label>
-              <button 
-                type="button" 
-                onClick={deselectAllChecklists} 
-                className="text-[10px] text-orange-500 hover:underline"
+              <button
+                type="button"
+                onClick={deselectAllChecklists}
+                className="text-[10px] text-teal-600 dark:text-teal-400 hover:underline"
               >
                 Deselect All
               </button>
             </div>
-            <div 
+            <div
               className="input flex items-center justify-between cursor-pointer"
               onClick={() => setIsChecklistDropdownOpen(!isChecklistDropdownOpen)}
             >
               <span className="text-gray-400">{selectedChecklists.length > 0 ? `${selectedChecklists.length} Selected` : 'Select Checklist'}</span>
               <div className="flex items-center gap-2">
-                <span className="text-gray-400"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></span>
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                <ChevronDown size={14} className={`text-gray-400 transition-transform ${isChecklistDropdownOpen ? 'rotate-180' : ''}`} />
               </div>
             </div>
             {isChecklistDropdownOpen && (
-              <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
+              <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
                 <div className="sticky -top-2 z-20 -mx-2 -mt-2 mb-2 px-2 pt-2 pb-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
                   <input
                     className="input w-full"
@@ -539,15 +663,15 @@ function AddMemberModal({
                     onChange={(e) => setChecklistSearch(e.target.value)}
                   />
                 </div>
-                <div 
+                <div
                   className="p-2 text-sm rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 font-medium"
                   onClick={selectAllChecklists}
                 >
                   Select All
                 </div>
                 {checklists.filter(c => c.name.toLowerCase().includes(checklistSearch.toLowerCase())).map(c => (
-                  <div 
-                    key={c.id} 
+                  <div
+                    key={c.id}
                     className="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer"
                     onClick={() => toggleChecklist(c.id)}
                   >
@@ -562,9 +686,9 @@ function AddMemberModal({
           {/* RFI */}
           <div className="relative">
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">RFI</label>
-            <select 
-              className="input w-full" 
-              value={selectedRfi} 
+            <select
+              className="input w-full"
+              value={selectedRfi}
               onChange={(e) => setSelectedRfi(e.target.value)}
             >
               <option value="">Select RFI</option>
@@ -575,12 +699,12 @@ function AddMemberModal({
           <p className="text-xs text-amber-500 font-medium">Checklist are not linked with RFI</p>
 
           {error && <p className="text-xs text-red-500">{error}</p>}
-          
+
           <div className="flex gap-3 pt-4">
             <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
             <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving || selectedUsers.length === 0 || !role}>
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              {saving ? 'Saving…' : 'Add'}
+              {saving ? <Loader2 size={14} className="animate-spin" /> : isEdit ? null : <Plus size={14} />}
+              {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add'}
             </button>
           </div>
         </form>
