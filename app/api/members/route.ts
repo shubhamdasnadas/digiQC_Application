@@ -16,12 +16,11 @@ export async function GET(request: NextRequest) {
       payload.orgId!,
       `SELECT m.*,
          CASE
-           WHEN m.active = false THEN 'Inactive'
-           WHEN LOWER(COALESCE(m.status, 'pending')) = 'pending' THEN 'Pending'
-           WHEN u.password_hash IS NOT NULL AND LENGTH(TRIM(u.password_hash)) > 10 THEN 'Active'
-           WHEN m.status IS NOT NULL AND LOWER(m.status) = 'active' THEN 'Active'
+           WHEN LOWER(COALESCE(m.password_status, '')) = 'pending' THEN 'Pending'
+           WHEN LOWER(COALESCE(m.password_status, '')) = 'completed' THEN 'Completed'
+           WHEN u.password_hash IS NOT NULL AND LENGTH(TRIM(u.password_hash)) > 10 THEN 'Completed'
            ELSE 'Pending'
-         END as status
+         END as password_status
        FROM members m
        LEFT JOIN public.users u ON LOWER(TRIM(m.email)) = LOWER(TRIM(u.email))
        ORDER BY m.created_at DESC`
@@ -67,9 +66,6 @@ export async function PUT(request: NextRequest) {
     const activeProjects = body.active_projects !== undefined ? String(body.active_projects).trim() : existing.active_projects;
     const inactiveProjects = body.inactive_projects !== undefined ? String(body.inactive_projects).trim() : existing.inactive_projects;
 
-    // Reset member status to pending until the user verifies/updates their password via the sent email link
-    const newStatus = 'pending';
-
     await orgQuery(payload.orgId!,
       `UPDATE members
        SET name = $1,
@@ -81,9 +77,9 @@ export async function PUT(request: NextRequest) {
            active = $7,
            active_projects = $8,
            inactive_projects = $9,
-           status = $10,
+           password_status = 'pending',
            updated_at = NOW()
-       WHERE id = $11`,
+       WHERE id = $10`,
       [
         name,
         email,
@@ -94,7 +90,6 @@ export async function PUT(request: NextRequest) {
         active,
         activeProjects,
         inactiveProjects,
-        newStatus,
         id
       ]
     );
@@ -226,11 +221,11 @@ export async function POST(request: NextRequest) {
         // Insert new member
         await orgQuery(payload.orgId!,
           `INSERT INTO members (
-             organization_id, name, email, phone, access_type, active, status,
+             organization_id, name, email, phone, access_type, active, status, password_status,
              default_role, teams, active_projects, inactive_projects,
              created_at, updated_at
            )
-           VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, NOW(), NOW())`,
+           VALUES ($1, $2, $3, $4, $5, $6, 'active', 'pending', $7, $8, $9, $10, NOW(), NOW())`,
           [
             payload.orgId,
             name,

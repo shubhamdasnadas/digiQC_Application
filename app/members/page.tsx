@@ -18,6 +18,7 @@ export default function Members() {
   const [showImport, setShowImport] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
+  const [filterPasswordStatus, setFilterPasswordStatus] = useState('All');
   const [filterAccessType, setFilterAccessType] = useState('All');
   const [filterTeam, setFilterTeam] = useState('All');
 
@@ -112,10 +113,11 @@ export default function Members() {
     const email = (m?.email || '').toLowerCase();
     const matchesSearch = !q || name.includes(q) || email.includes(q);
     const matchesAccess = filterAccessType === 'All' || m.access_type === filterAccessType;
-    const memberStatus = (m.status || (m.active ? 'Active' : 'Inactive')).toLowerCase();
-    const matchesStatus = filterStatus === 'All' || filterStatus.toLowerCase() === memberStatus;
+    const matchesStatus = filterStatus === 'All' || (filterStatus === 'Active' ? m.active : !m.active);
+    const passwordState = (m.password_status || '').toLowerCase() === 'completed' ? 'Completed' : 'Pending';
+    const matchesPassword = filterPasswordStatus === 'All' || filterPasswordStatus === passwordState;
     const matchesTeam = filterTeam === 'All' || (m.teams || '').includes(filterTeam);
-    return matchesSearch && matchesAccess && matchesStatus && matchesTeam;
+    return matchesSearch && matchesAccess && matchesStatus && matchesPassword && matchesTeam;
   });
 
   const exportRows = () => filteredMembers.map(m => ({
@@ -123,7 +125,8 @@ export default function Members() {
     Email: m.email,
     Phone: m.phone,
     'Access Type': m.access_type,
-    Status: m.status || (m.active ? 'Active' : 'Inactive'),
+    Status: m.active ? 'Active' : 'Inactive',
+    Password: (m.password_status || '').toLowerCase() === 'completed' ? 'Completed' : 'Pending',
     Role: m.default_role,
     Team: m.teams,
     'Active Projects': m.active_projects,
@@ -192,8 +195,19 @@ export default function Members() {
             >
               <option value="All">All Status</option>
               <option value="Active">Active</option>
-              <option value="Pending">Pending</option>
               <option value="Inactive">Inactive</option>
+            </select>
+            <ChevronDown size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+          <div className="relative">
+            <select
+              className="input pl-8 pr-4 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-teal-500"
+              value={filterPasswordStatus}
+              onChange={e => setFilterPasswordStatus(e.target.value)}
+            >
+              <option value="All">All Password</option>
+              <option value="Completed">Completed</option>
+              <option value="Pending">Pending</option>
             </select>
             <ChevronDown size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
@@ -249,6 +263,7 @@ export default function Members() {
                   <th className="px-5 py-3 text-left font-medium">#</th>
                   <th className="px-5 py-3 text-left font-medium">USER</th>
                   <th className="px-5 py-3 text-left font-medium">STATUS</th>
+                  <th className="px-5 py-3 text-left font-medium">PASSWORD</th>
                   <th className="px-5 py-3 text-left font-medium">ROLE</th>
                   <th className="px-5 py-3 text-left font-medium">ASSIGNED TEAM</th>
                   <th className="px-5 py-3 text-left font-medium">ASSIGNED PROJECTS</th>
@@ -277,14 +292,17 @@ export default function Members() {
                       </div>
                     </td>
                     <td className="px-5 py-3">
+                      <span className={`badge ${m.active ? 'badge-active' : 'badge-on_hold'} text-xs`}>
+                        {m.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
                       <span className={`badge ${
-                        m.status === 'Pending' || m.status === 'pending'
-                          ? 'badge-on_hold'
-                          : (m.status === 'Active' || m.status === 'active' || (m.active && !m.status))
-                            ? 'badge-active'
-                            : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                        (m.password_status || '').toLowerCase() === 'completed'
+                          ? 'badge-active'
+                          : 'badge-on_hold'
                       } text-xs`}>
-                        {m.status || (m.active ? 'Active' : 'Inactive')}
+                        {(m.password_status || '').toLowerCase() === 'completed' ? 'Completed' : 'Pending'}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-gray-600 dark:text-gray-300">{m.default_role || 'User'}</td>
@@ -322,7 +340,7 @@ export default function Members() {
                 ))}
                 {filteredMembers.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-5 py-10 text-center text-gray-500 dark:text-gray-400">No members found matching your criteria.</td>
+                    <td colSpan={9} className="px-5 py-10 text-center text-gray-500 dark:text-gray-400">No members found matching your criteria.</td>
                   </tr>
                 )}
               </tbody>

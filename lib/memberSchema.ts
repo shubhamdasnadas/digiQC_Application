@@ -11,7 +11,8 @@ export async function ensureMemberSchema() {
         phone text DEFAULT '',
         access_type text DEFAULT 'Paid',
         active boolean DEFAULT true,
-        status text DEFAULT 'pending',
+        status text DEFAULT 'active',
+        password_status text DEFAULT 'pending',
         default_role text DEFAULT 'User',
         teams text DEFAULT '',
         active_projects text DEFAULT '',
@@ -26,7 +27,8 @@ export async function ensureMemberSchema() {
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS phone text DEFAULT '';
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS access_type text DEFAULT 'Paid';
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS active boolean DEFAULT true;
-      ALTER TABLE public.members ADD COLUMN IF NOT EXISTS status text DEFAULT 'pending';
+      ALTER TABLE public.members ADD COLUMN IF NOT EXISTS status text DEFAULT 'active';
+      ALTER TABLE public.members ADD COLUMN IF NOT EXISTS password_status text DEFAULT 'pending';
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS default_role text DEFAULT 'User';
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS teams text DEFAULT '';
       ALTER TABLE public.members ADD COLUMN IF NOT EXISTS active_projects text DEFAULT '';

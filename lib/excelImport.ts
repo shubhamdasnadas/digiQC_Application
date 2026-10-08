@@ -90,8 +90,12 @@ export function parseDate(value: any): string | null {
 
 export function parseBoolean(value: any): boolean {
   if (typeof value === 'boolean') return value;
-  const s = String(value ?? '').trim().toLowerCase();
-  return s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 't' || s === 'required' || s === 'checked' || s === 'verified';
+  if (value === null || value === undefined) return false;
+  const s = String(value).trim().toLowerCase();
+  if (s === 'inactive' || s === 'false' || s === 'no' || s === '0' || s === 'f' || s === 'disabled' || s === 'on_hold') {
+    return false;
+  }
+  return s === 'active' || s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 't' || s === 'required' || s === 'checked' || s === 'verified' || s === 'live' || s === 'enabled' || s === 'paid';
 }
 
 export function getField(row: ParsedRow, ...keys: string[]): any {
