@@ -136,12 +136,28 @@ export interface Checklist {
   created_at: string;
   project?: { name: string };
   source?: 'org' | 'library';
+  stages?: Array<{
+    id?: string;
+    name: string;
+    witness_required?: boolean;
+    drawing_required?: boolean;
+    checkpoints?: Array<{
+      id?: string;
+      question: string;
+      input_type?: string;
+      photo_required?: boolean;
+      remark_required?: boolean;
+    }>;
+  }>;
 }
 
 export interface ChecklistStage {
   id: string;
   checklist_id: string;
+  /** Set when the stage came from `library_stages`. */
   library_checklist_id?: string;
+  /** Set when the stage came from `project_stage`. */
+  project_checklist_id?: string;
   sr_no: number;
   index?: number;
   name: string;
@@ -153,7 +169,10 @@ export interface ChecklistStage {
 export interface Checkpoint {
   id: string;
   stage_id: string;
+  /** Set when the checkpoint came from `library_checkpoints`. */
   library_stage_id?: string;
+  /** Set when the checkpoint came from `project_checkpoints`. */
+  project_stage_id?: string;
   sr_no: number;
   question: string;
   input_type: 'yes_no' | 'numeric' | 'text' | 'options' | 'date';

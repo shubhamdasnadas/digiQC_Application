@@ -24,11 +24,15 @@ export async function POST(request: NextRequest) {
   await ensureChecklistSchema(payload.orgId!);
 
   try {
-    const { name, reference_number } = await request.json();
-    if (!name || !reference_number) {
-      return NextResponse.json({ error: 'name and reference_number are required' }, { status: 400 });
+    const { name, reference_number, uom } = await request.json();
+    if (!name || !String(name).trim()) {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
-    const checklist = await createLibraryChecklist(name, reference_number);
+    const checklist = await createLibraryChecklist(
+      String(name).trim(),
+      reference_number ? String(reference_number).trim() : '',
+      uom ? String(uom).trim() : ''
+    );
     return NextResponse.json(checklist);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

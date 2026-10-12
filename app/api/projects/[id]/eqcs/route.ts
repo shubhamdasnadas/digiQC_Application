@@ -62,18 +62,21 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
     if (q) {
       params.push(`%${q}%`);
       const i = params.length;
-      where.push(`(LOWER(e.location) LIKE $${i} OR LOWER(COALESCE(c.name,'')) LIKE $${i} OR LOWER(COALESCE(e.maker_team,'')) LIKE $${i} OR LOWER(COALESCE(e.inspector_name,'')) LIKE $${i})`);
+      where.push(`(LOWER(e.location) LIKE $${i} OR LOWER(COALESCE(c.name, lc.name, '')) LIKE $${i} OR LOWER(COALESCE(e.maker_team,'')) LIKE $${i} OR LOWER(COALESCE(e.inspector_name,'')) LIKE $${i})`);
     }
 
     const { rows } = await orgQuery(
       payload.orgId!,
       `SELECT e.*,
-              c.name AS checklist_name,
-              c.uom AS checklist_uom,
+              COALESCE(c.name, lc.name) AS checklist_name,
+              COALESCE(c.uom, lc.uom) AS checklist_uom,
               COALESCE(NULLIF(e.inspector_name, ''), m.name, u.name, 'Admin') AS inspector_display_name,
               m_app.name AS approver_name
        FROM eqcs e
-       LEFT JOIN library_checklists c ON c.id = e.checklist_id
+       -- A checklist now lives in project_checklist, but EQCs created before
+       -- the split still point at rows that were in library_checklists.
+       LEFT JOIN project_checklist c ON c.id = e.checklist_id
+       LEFT JOIN library_checklists lc ON lc.id = e.checklist_id
        LEFT JOIN members m ON m.id = e.inspected_by
        LEFT JOIN users u ON u.id = e.inspected_by
        LEFT JOIN members m_app ON m_app.id = e.approver_id
@@ -256,7 +259,10 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       if (teamIds.length > 0 && r.checklist_id) {
         const { rows: clRows } = await orgQuery(
           payload.orgId!,
-          `SELECT name FROM library_checklists WHERE id = $1`,
+          `SELECT COALESCE(
+                    (SELECT name FROM project_checklist WHERE id = $1),
+                    (SELECT name FROM library_checklists WHERE id = $1)
+                  ) AS name`,
           [r.checklist_id]
         );
         const checklistName = clRows[0]?.name ?? '';
@@ -284,7 +290,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
         if (userIds.length > 0) {
           await orgQuery(
             payload.orgId!,
-            `UPDATE library_checklists SET status = 'live' WHERE id = $1`,
+            `UPDATE project_checklist SET status = 'live', updated_at = NOW() WHERE id = $1`,
             [r.checklist_id]
           );
         }
@@ -318,7 +324,9 @@ export async function DELETE(request: NextRequest, ctx: RouteContext) {
       [eqcId, projectId]
     );
 
-    await touchProject(payload.orgId ?? null, projectId, payload.userId);
+    if (payload.orgId) {
+      await touchProject(payload.orgId, projectId, payload.userId);
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });

@@ -1,8 +1,10 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
+import Toaster from '@/components/ui/toast';
 import { usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
@@ -16,13 +18,17 @@ const authPages = [
     '/create-password',
 ];
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+type AppShellProps = {
+    children?: ReactNode;
+};
+
+export default function AppShell({ children }: AppShellProps) {
     const pathname = usePathname();
     const { loading } = useAuth();
 
     // Auth pages don't need the sidebar/header layout
     if (authPages.some(page => pathname === page || pathname.startsWith(page + '/'))) {
-        return <>{children}</>;
+        return <Toaster>{children}</Toaster>;
     }
 
     // Show loading spinner while checking auth
@@ -40,7 +46,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
                 <Header />
                 <main className="flex-1 overflow-y-auto">
-                    {children}
+                    <Toaster>{children}</Toaster>
                 </main>
             </div>
         </div>

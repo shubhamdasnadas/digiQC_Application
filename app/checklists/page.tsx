@@ -2,39 +2,50 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ClipboardList, Plus, X, Loader2, Upload, ChevronDown, FileDown, Edit2, Copy, Trash2, Download } from 'lucide-react';
+import {
+  ClipboardList, Plus, X, Loader2, Upload, ChevronDown, FileDown, Edit2, Copy, Trash2, Download,
+  Menu
+} from 'lucide-react';
 import ImportModal from '@/components/ImportModal';
 import EditChecklistModal from '@/components/EditChecklistModal';
 import { bulkInsertWithChunking, type ParsedRow, type ImportResult, sanitizeString, parseBoolean, getField } from '@/lib/excelImport';
 import { exportToXlsx } from '@/lib/excelExport';
 import { downloadSampleExcel } from '@/lib/excelTemplate';
-import type { Checklist, Project } from '@/lib/types';
+import type { Checklist } from '@/lib/types';
+import { useToast } from '@/components/ui/use-toast';
 
 export default function Checklists() {
   const router = useRouter();
-  const [checklists, setChecklists] = useState<(Checklist & { project?: { name: string } })[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [checklists, setChecklists] = useState<(Checklist & { source?: 'library' })[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showTable, setShowTable] = useState(true);
   const [editingChecklist, setEditingChecklist] = useState<Checklist | null>(null);
-  const [form, setForm] = useState({ project_id: '', name: '', uom: '', reference_number: '', template_id: '' });
-  const [isTemplate, setIsTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: '', uom: '', reference_number: '' });
+
+  const { toast } = useToast();
 
   const load = async () => {
-    const [clRes, pRes] = await Promise.all([
-      fetch('/api/checklists'),
-      fetch('/api/projects'),
-    ]);
-    const cl = await clRes.json();
-    const p = await pRes.json();
-    setChecklists(Array.isArray(cl) ? cl : []);
-    setProjects(Array.isArray(p) ? p : []);
-    if (p.length > 0) setForm(f => ({ ...f, project_id: p[0].id }));
-    setLoading(false);
+    setLoading(true);
+    try {
+      const response = await fetch('/api/checklists/library');
+      if (!response.ok) throw new Error('Failed to load library checklists.');
+      const data: unknown = await response.json();
+      if (!Array.isArray(data)) throw new Error('The library checklist response was invalid.');
+      setChecklists(data);
+    } catch (error) {
+      console.error('Checklist load error:', error);
+      toast({
+        title: 'Could not load checklists',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -58,7 +69,7 @@ export default function Checklists() {
 
     const normalizedData = data.map(r => {
       let name = sanitizeString(getField(r, 'Checklist Name', 'Checklist', 'checklist_name', 'checklist', 'name', 'Name'));
-      let refNum = sanitizeString(getField(r, 'REFERENCE NUMBER', 'Reference Number', 'Reference No', 'reference_number', 'reference_no', 'Ref No', 'ref_no'));
+      let refNum = sanitizeString(getField(r, 'REFERENCE NUMBER', 'Reference Number', 'reference_number', 'reference_no', 'Ref No', 'ref_no'));
       let stageName = sanitizeString(getField(r, 'Stage Name', 'Stage', 'stage_name', 'stage'));
       const checkpoint = sanitizeString(getField(r, 'Checkpoint', 'checkpoint', 'Checkpoint Name', 'checkpoint_name', 'Question', 'question'));
 
@@ -130,15 +141,30 @@ export default function Checklists() {
     e.preventDefault();
     if (!form.name.trim()) return;
     setSaving(true);
-    await fetch('/api/checklists', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    setSaving(false);
-    setShowAdd(false);
-    setForm({ project_id: projects[0]?.id || '', name: '', uom: '', reference_number: '', template_id: '' });
-    load();
+    try {
+      const response = await fetch('/api/checklists/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to create checklist.');
+      }
+      setShowAdd(false);
+      setForm({ name: '', uom: '', reference_number: '' });
+      await load();
+      toast({ title: 'Checklist created', description: 'The library checklist was created.' });
+    } catch (error) {
+      console.error('Checklist create error:', error);
+      toast({
+        title: 'Create failed',
+        description: error instanceof Error ? error.message : 'Failed to create checklist.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (c: Checklist, e: React.MouseEvent) => {
@@ -148,9 +174,17 @@ export default function Checklists() {
       const res = await fetch(`/api/checklists/${c.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete checklist');
       load();
+      toast({
+        title: 'Checklist deleted',
+        description: `Checklist "${c.name}" has been deleted.`,
+      });
     } catch (err) {
       console.error('Delete error:', err);
-      alert('Failed to delete checklist.');
+      toast({
+        title: 'Delete failed',
+        description: 'Failed to delete checklist.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -158,12 +192,10 @@ export default function Checklists() {
     e.stopPropagation();
     try {
       setLoading(true);
-      // Fetch details of this checklist
       const res = await fetch(`/api/checklists/${c.id}`);
       if (!res.ok) throw new Error('Failed to fetch checklist details');
       const detail = await res.json();
 
-      // Create new checklist with (Copy) name
       const copyName = `${c.name} (Copy)`;
       const clRes = await fetch('/api/checklists', {
         method: 'POST',
@@ -179,11 +211,15 @@ export default function Checklists() {
 
       if (!clRes.ok) throw new Error('Failed to copy checklist');
 
-      // Reload and open the new list
       await load();
+      setLoading(false);
     } catch (err) {
       console.error('Copy error:', err);
-      alert('Failed to copy checklist.');
+      toast({
+        title: 'Copy failed',
+        description: 'Failed to copy checklist.',
+        variant: 'destructive',
+      });
       setLoading(false);
     }
   };
@@ -191,29 +227,35 @@ export default function Checklists() {
   const handleExport = async () => {
     try {
       setExporting(true);
-      const res = await fetch('/api/checklists?export=true');
-      if (res.ok) {
-        const rows = await res.json();
-        if (Array.isArray(rows) && rows.length > 0) {
-          exportToXlsx(rows, 'valid8-checklists');
-          return;
-        }
-      }
-      // Fallback to table metadata export if detailed query is empty
-      const fallbackRows = checklists.map(c => ({
-        'Checklist Name': c.name,
-        'REFERENCE NUMBER': c.reference_number || '',
-        'UOM': c.uom || '',
-        'Status': c.status === 'live' ? 'Live' : 'Draft',
-        'Updated By': c.updated_by || 'Admin',
-        'Updated At': c.updated_at ? new Date(c.updated_at).toLocaleString('en-IN') : new Date(c.created_at).toLocaleString('en-IN'),
-      }));
-      if (fallbackRows.length > 0) {
-        exportToXlsx(fallbackRows, 'valid8-checklists');
-      }
+      const rows = checklists.flatMap((checklist) => {
+        const stages = checklist.stages?.length ? checklist.stages : [{ name: 'Single Stage', checkpoints: [] }];
+        return stages.flatMap((stage) => {
+          const checkpoints = stage.checkpoints?.length ? stage.checkpoints : [null];
+          return checkpoints.map((checkpoint) => ({
+            'Checklist Name': checklist.name,
+            'REFERENCE NUMBER': checklist.reference_number || '',
+            'Stage Name': stage.name,
+            'Checkpoint': checkpoint?.question || '',
+            'Type': checkpoint?.input_type || '',
+            'Photo': checkpoint?.photo_required ? 'TRUE' : 'FALSE',
+            'Remark': checkpoint?.remark_required ? 'TRUE' : 'FALSE',
+            'UOM': checklist.uom || '',
+            'Status': checklist.status === 'live' ? 'Live' : 'Draft',
+            'Updated By': checklist.updated_by || '—',
+            'Updated At': checklist.updated_at
+              ? new Date(checklist.updated_at).toLocaleString('en-IN')
+              : new Date(checklist.created_at).toLocaleString('en-IN'),
+          }));
+        });
+      });
+      if (rows.length > 0) exportToXlsx(rows, 'valid8-checklists');
     } catch (err) {
       console.error('Export error:', err);
-      alert('Failed to export checklists.');
+      toast({
+        title: 'Export failed',
+        description: 'Failed to export checklists.',
+        variant: 'destructive',
+      });
     } finally {
       setExporting(false);
     }
@@ -230,6 +272,11 @@ export default function Checklists() {
             {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Export
           </button>
           <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-1.5"><Plus size={15} /> Add Checklist</button>
+          {checklists.length > 0 && (
+            <button onClick={() => router.push('/dashboard')} className="btn-ghost text-sm text-teal-600 dark:text-teal-400 hover:underline">
+              Browse Dashboard
+            </button>
+          )}
         </div>
       </div>
 
@@ -255,6 +302,7 @@ export default function Checklists() {
                     <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">UOM</th>
                     <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Reference Number</th>
                     <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Status</th>
+                    <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Stages</th>
                     <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Updated By</th>
                     <th className="px-5 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Updated At</th>
                     <th className="px-5 py-3 text-center font-medium text-gray-600 dark:text-gray-400">Actions</th>
@@ -276,7 +324,10 @@ export default function Checklists() {
                           {c.status === 'live' ? 'Live' : 'Draft'}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-sm">{c.updated_by ?? '—'}</td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-xs">
+                        {c.stages?.length ?? 0} stages · {c.stages?.reduce((total, stage) => total + (stage.checkpoints?.length ?? 0), 0) ?? 0} checkpoints
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 dark:text-gray-300 text-xs">{c.updated_by ?? '—'}</td>
                       <td className="px-5 py-3 text-gray-500 dark:text-gray-400 text-xs">
                         {c.updated_at ? new Date(c.updated_at).toLocaleString('en-IN') : new Date(c.created_at).toLocaleString('en-IN')}
                       </td>
@@ -308,6 +359,17 @@ export default function Checklists() {
                             title="Delete"
                           >
                             <Trash2 size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/checklists/${c.id}?name=${encodeURIComponent(c.name)}`);
+                            }}
+                            className="p-1 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                            title="Manage Stages and Checkpoints"
+                          >
+                            <Menu size={14} />
                           </button>
                         </div>
                       </td>
@@ -450,6 +512,7 @@ export default function Checklists() {
           ]}
         />
       )}
+
     </div>
   );
 }

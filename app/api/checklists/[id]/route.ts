@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { orgQuery } from '@/lib/db';
 import { ensureChecklistSchema } from '@/lib/checklistSchema';
+import { CHECKLIST_TABLES, getChecklistChildren, resolveChecklistScope } from '@/lib/checklistLibrary';
 import { touchProject } from '@/lib/projects';
 
 export async function GET(
@@ -16,42 +17,15 @@ export async function GET(
     await ensureChecklistSchema(payload.orgId!);
 
     try {
-        const { rows: checklistRows } = await orgQuery(payload.orgId!,
-            `SELECT * FROM library_checklists WHERE id = $1`,
-            [id]
-        );
-
-        if (checklistRows.length === 0) {
+        const resolved = await resolveChecklistScope(id);
+        if (!resolved) {
             return NextResponse.json({ error: 'Checklist not found' }, { status: 404 });
         }
 
-        const checklist = checklistRows[0];
-
-        // Fetch stages ordered by index
-        const { rows: stages } = await orgQuery(payload.orgId!,
-            `SELECT id, library_checklist_id AS checklist_id, library_checklist_id,
-                    COALESCE("index", sr_no, 1) AS index,
-                    COALESCE(sr_no, "index", 1) AS sr_no,
-                    name, witness_required, drawing_required, created_at
-             FROM library_stages
-             WHERE library_checklist_id = $1
-             ORDER BY COALESCE("index", sr_no, 1) ASC, created_at ASC`,
-            [id]
-        );
-
-        // Fetch all checkpoints for this checklist
-        const { rows: checkpoints } = await orgQuery(payload.orgId!,
-            `SELECT lcp.id, lcp.library_stage_id AS stage_id, lcp.library_stage_id, lcp.sr_no, lcp.question,
-                    lcp.input_type, lcp.photo_required, lcp.remark_required, lcp.created_at
-             FROM library_checkpoints lcp
-             JOIN library_stages ls ON lcp.library_stage_id = ls.id
-             WHERE ls.library_checklist_id = $1
-             ORDER BY lcp.sr_no ASC`,
-            [id]
-        );
+        const { stages, checkpoints } = await getChecklistChildren(resolved.scope, id);
 
         return NextResponse.json({
-            ...checklist,
+            ...resolved,
             stages,
             checkpoints,
         });
@@ -72,23 +46,20 @@ export async function PATCH(
     await ensureChecklistSchema(payload.orgId!);
 
     try {
-        const { rows: existing } = await orgQuery(payload.orgId!,
-            `SELECT project_id FROM library_checklists WHERE id = $1`,
-            [id]
-        );
-
-        if (existing.length === 0) {
+        const resolved = await resolveChecklistScope(id);
+        if (!resolved) {
             return NextResponse.json({ error: 'Checklist not found' }, { status: 404 });
         }
 
-        const projectId = existing[0]?.project_id;
+        const t = CHECKLIST_TABLES[resolved.scope];
+        const projectId = resolved.project_id;
         const body = await request.json();
         const { name, reference_number, uom, status, reorder_stages, reorder_checkpoints } = body;
 
         // Update basic info
         if (name || reference_number !== undefined || uom !== undefined || status) {
             await orgQuery(payload.orgId!,
-                `UPDATE library_checklists SET
+                `UPDATE ${t.checklist} SET
                   name = COALESCE($1, name),
                   reference_number = COALESCE($2, reference_number),
                   uom = COALESCE($3, uom),
@@ -108,9 +79,9 @@ export async function PATCH(
 
                 if (stageId) {
                     await orgQuery(payload.orgId!,
-                        `UPDATE library_stages
+                        `UPDATE ${t.stage}
                          SET "index" = $1, sr_no = $1
-                         WHERE id = $2 AND library_checklist_id = $3`,
+                         WHERE id = $2 AND ${t.checklistFk} = $3`,
                         [newIdx, stageId, id]
                     );
                 }
@@ -121,7 +92,7 @@ export async function PATCH(
         if (reorder_checkpoints && Array.isArray(reorder_checkpoints)) {
             for (const item of reorder_checkpoints) {
                 await orgQuery(payload.orgId!,
-                    `UPDATE library_checkpoints SET sr_no = $1 WHERE id = $2`,
+                    `UPDATE ${t.checkpoint} SET sr_no = $1 WHERE id = $2`,
                     [item.sr_no, item.id]
                 );
             }
@@ -146,18 +117,18 @@ export async function DELETE(
     await ensureChecklistSchema(payload.orgId!);
 
     try {
-        const { rows: existing } = await orgQuery(payload.orgId!,
-            `SELECT project_id FROM library_checklists WHERE id = $1`,
-            [id]
-        );
-        const projectId = existing[0]?.project_id;
+        const resolved = await resolveChecklistScope(id);
+
+        const t = CHECKLIST_TABLES[resolved?.scope ?? 'library'];
 
         await orgQuery(payload.orgId!,
-            `DELETE FROM library_checklists WHERE id = $1`,
+            `DELETE FROM ${t.checklist} WHERE id = $1`,
             [id]
         );
 
-        if (projectId) await touchProject(payload.orgId!, projectId, payload.userId);
+        if (resolved?.project_id) {
+            await touchProject(payload.orgId!, resolved.project_id, payload.userId);
+        }
         return NextResponse.json({ success: true });
     } catch (error) {
         return NextResponse.json({ error: (error as Error).message }, { status: 500 });

@@ -15,8 +15,8 @@ const navItems = [
   { href: '/checklists', label: 'Checklists', icon: ClipboardList },
   { href: '/members', label: 'Members', icon: Users },
   { href: '/teams', label: 'Teams', icon: Users },
-  { href: '/organizations', label: 'Organizations', icon: Building2 },
-  { href: '/setup', label: 'Setup', icon: Settings },
+  // { href: '/organizations', label: 'Organizations', icon: Building2 },
+  // { href: '/setup', label: 'Setup', icon: Settings },
 ];
 
 export default function Sidebar() {
