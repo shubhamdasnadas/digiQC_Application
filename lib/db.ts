@@ -318,6 +318,7 @@ export async function ensurePublicSchemaTables() {
         UNIQUE(project_id, team_id)
       );
 
+      ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS completion_status boolean NOT NULL DEFAULT false;
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS maker_team text DEFAULT '';
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS witness_types text[] DEFAULT '{}';
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS witness_photos text[] DEFAULT '{}';

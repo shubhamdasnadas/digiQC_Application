@@ -168,23 +168,27 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       const status = allStagesDone ? (anyFail ? 'failed' : 'passed') : 'pending';
       // While stages remain, the entry reports the stage now in progress.
       const runningStageIndex = allStagesDone ? submittedStageIndex : submittedStageIndex + 1;
+      // The inspection as a whole is complete once every stage has been reached.
+      const isComplete = allStagesDone;
 
       if (existing) {
         await orgQuery(
           payload.orgId!,
           `UPDATE eqcs SET
              stage_index = $1, total_stages = $2, stage_result = $3, status = $4,
-             inspection_data = $5::jsonb, stages_data = $6::jsonb,
-             maker_team = $7, witness_types = $8, witness_photos = $9, drawing_photos = $10,
-             geo_tag = $11, time_taken = $12, completed_at = $13, synced_at = $14,
-             inspector_name = $15, inspector_team = $16,
-             inspected_by = COALESCE($17, inspected_by), inspected_at = $13
-           WHERE id = $18 AND project_id = $19`,
+             completion_status = $5,
+             inspection_data = $6::jsonb, stages_data = $7::jsonb,
+             maker_team = $8, witness_types = $9, witness_photos = $10, drawing_photos = $11,
+             geo_tag = $12, time_taken = $13, completed_at = $14, synced_at = $15,
+             inspector_name = $16, inspector_team = $17,
+             inspected_by = COALESCE($18, inspected_by), inspected_at = $14
+           WHERE id = $19 AND project_id = $20`,
           [
             runningStageIndex,
             totalStages,
             stageResult,
             status,
+            isComplete,
             JSON.stringify(mergedCheckpoints),
             JSON.stringify(mergedStages),
             r.maker_team ?? '',
@@ -207,12 +211,12 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
           payload.orgId!,
           `INSERT INTO eqcs
              (project_id, location, checklist_id, stage_index, total_stages,
-              stage_result, approver_id, approver_log, status, inspected_by,
+              stage_result, completion_status, approver_id, approver_log, status, inspected_by,
               inspected_at, rfi_id, notes, assigned_user_ids, assigned_team_ids,
               maker_team, witness_types, witness_photos, drawing_photos,
               inspection_data, stages_data, geo_tag, time_taken, completed_at, synced_at,
               inspector_name, inspector_team)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
           [
             id,
             location,
@@ -220,6 +224,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
             runningStageIndex,
             totalStages,
             stageResult,
+            isComplete,
             r.approver_id ?? null,
             r.approver_log ?? '',
             status,

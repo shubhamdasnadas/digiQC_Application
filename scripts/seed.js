@@ -264,6 +264,7 @@ async function seed() {
             stage_index integer NOT NULL DEFAULT 1,
             total_stages integer NOT NULL DEFAULT 1,
             stage_result text DEFAULT 'pending' CHECK (stage_result IN ('pass','fail','pending')),
+            completion_status boolean NOT NULL DEFAULT false,
             approver_id uuid,
             approver_log text DEFAULT '',
             status text NOT NULL DEFAULT 'pending' CHECK (status IN ('passed','failed','pending','rfi')),

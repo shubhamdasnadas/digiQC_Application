@@ -207,6 +207,8 @@ export interface EQC {
   stage_index: number;
   total_stages: number;
   stage_result: 'pass' | 'fail' | 'pending';
+  /** True once the last stage has been completed (all stages done). */
+  completion_status: boolean;
   approver_id: string | null;
   approver_log: string;
   status: 'passed' | 'failed' | 'pending' | 'rfi';
