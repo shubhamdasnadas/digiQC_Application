@@ -2,6 +2,9 @@
 -- Valid8 — Full Database Setup (Direct Public Schema)
 -- ============================================================
 
+
+-- psql -U postgres -d digiqc_new -f db/setup.sql
+
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================================
