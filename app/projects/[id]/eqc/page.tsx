@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import TabsPageShell from '@/components/TabsPageShell';
 import DataTable, { type Column } from '@/components/DataTable';
-import type { EQC, Checklist, ChecklistStage, Checkpoint, CheckpointResult, Team, Member } from '@/lib/types';
+import type { EQC, Checklist, ChecklistStage, Checkpoint, CheckpointResult, EQCStageData, Team, Member } from '@/lib/types';
 import { useProject } from '@/context/ProjectContext';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -535,6 +535,9 @@ function AddEQCWizardModal({
   const [stages, setStages] = useState<ChecklistStage[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  // Stage this submission covers — an inspection continues its existing entry
+  // stage by stage instead of creating one row per stage.
+  const [stageIndex, setStageIndex] = useState(1);
 
   const [selectedWitnesses, setSelectedWitnesses] = useState<string[]>(['Client', 'Contractor']);
   const [witnessPhotos, setWitnessPhotos] = useState<string[]>([]);
@@ -621,34 +624,65 @@ function AddEQCWizardModal({
     setError('');
     setLoadingDetails(true);
 
+    const location = (useCustomLocation
+      ? customLocationText
+      : locationSegments.filter(Boolean).join(' / ')
+    ).trim();
+
     try {
-      const res = await fetch(`/api/checklists/${selectedChecklistId}`);
-      const data = await res.json();
+      const [clRes, eqcRes] = await Promise.all([
+        fetch(`/api/checklists/${selectedChecklistId}`),
+        location
+          ? fetch(
+              `/api/projects/${projectId}/eqcs?checklist_id=${selectedChecklistId}&location=${encodeURIComponent(location)}`
+            )
+          : Promise.resolve(null),
+      ]);
+      const data = await clRes.json();
 
       const stgList: ChecklistStage[] = Array.isArray(data.stages) && data.stages.length > 0
         ? data.stages
         : [{ id: 'stage-1', checklist_id: selectedChecklistId, sr_no: 1, name: 'Pre-pour Inspection', created_at: '' }];
 
-      let cpList: Checkpoint[] = Array.isArray(data.checkpoints) && data.checkpoints.length > 0 ? data.checkpoints : [];
+      // An inspection that is still mid-way is continued from its current stage
+      // rather than started over as a new entry.
+      const existingRows = eqcRes ? await eqcRes.json().catch(() => []) : [];
+      const pendingEntry = Array.isArray(existingRows)
+        ? existingRows.find((e: EQC) => e.stage_result === 'pending')
+        : null;
+      const nextStage = pendingEntry
+        ? Math.min(Math.max(Number(pendingEntry.stage_index) || 1, 1), stgList.length)
+        : 1;
 
-      // If checklist has no checkpoints, provide standard quality checkpoints
+      let cpList: Checkpoint[] = Array.isArray(data.checkpoints) ? data.checkpoints : [];
+
+      // If the checklist has no checkpoints, provide standard quality checkpoints
       if (cpList.length === 0) {
+        const stageId = stgList[nextStage - 1]?.id || stgList[0].id;
         cpList = [
-          { id: 'cp-1', stage_id: stgList[0].id, sr_no: 1, question: 'Check reinforcement placement and concrete cover clearance', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
-          { id: 'cp-2', stage_id: stgList[0].id, sr_no: 2, question: 'Verify formwork alignment, plumbness, and structural stability', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
-          { id: 'cp-3', stage_id: stgList[0].id, sr_no: 3, question: 'Check cleanliness of pour area and removal of debris/slurry', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
-          { id: 'cp-4', stage_id: stgList[0].id, sr_no: 4, question: 'Confirm embedded conduits, boxes, and sleeve fixtures positioning', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
-          { id: 'cp-5', stage_id: stgList[0].id, sr_no: 5, question: 'Inspect dowel bars, lap lengths, and tie-wire anchoring', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
-          { id: 'cp-6', stage_id: stgList[0].id, sr_no: 6, question: 'Review safety barriers, working platforms, and access points', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-1', stage_id: stageId, sr_no: 1, question: 'Check reinforcement placement and concrete cover clearance', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-2', stage_id: stageId, sr_no: 2, question: 'Verify formwork alignment, plumbness, and structural stability', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-3', stage_id: stageId, sr_no: 3, question: 'Check cleanliness of pour area and removal of debris/slurry', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-4', stage_id: stageId, sr_no: 4, question: 'Confirm embedded conduits, boxes, and sleeve fixtures positioning', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-5', stage_id: stageId, sr_no: 5, question: 'Inspect dowel bars, lap lengths, and tie-wire anchoring', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
+          { id: 'cp-6', stage_id: stageId, sr_no: 6, question: 'Review safety barriers, working platforms, and access points', input_type: 'yes_no', photo_required: false, remark_required: false, created_at: '' },
         ];
       }
 
+      // Only the stage being inspected now is answered; earlier stages stay as recorded.
+      const stageId = stgList[nextStage - 1]?.id;
+      const stageCheckpoints = cpList.filter((cp) => cp.stage_id === stageId);
+      const visibleCheckpoints = stageCheckpoints.length > 0 ? stageCheckpoints : cpList;
+
       setStages(stgList);
-      setCheckpoints(cpList);
+      setStageIndex(nextStage);
+      setCheckpoints(visibleCheckpoints);
+      setWitnessPhotos([]);
+      setDrawingPhotos([]);
 
       // Pre-initialize responses default
       const initialResponses: Record<number, { response: 'Yes' | 'No' | 'Skip'; remark: string; photos: string[] }> = {};
-      for (let idx = 0; idx < cpList.length; idx++) {
+      for (let idx = 0; idx < visibleCheckpoints.length; idx++) {
         initialResponses[idx] = {
           response: 'Yes',
           remark: '',
@@ -723,7 +757,7 @@ function AddEQCWizardModal({
     // Defensive validation for required fields
     const missing: string[] = [];
 
-    const currentStage = stages[0];
+    const currentStage = stages[stageIndex - 1];
     if (currentStage?.witness_required && selectedWitnesses.length === 0) {
       missing.push('Witness Selection');
     }
@@ -766,12 +800,14 @@ function AddEQCWizardModal({
       const hasFail = results.some((r) => r.response === 'No');
       const stageResult = hasFail ? 'fail' : 'pass';
       const status = hasFail ? 'failed' : 'passed';
+      const stageName = stages[stageIndex - 1]?.name || `Stage ${stageIndex}`;
+      const now = new Date().toISOString();
 
       const payload = {
         project_id: projectId,
         location: formattedLocation || 'Main Block / Level 1',
         checklist_id: selectedChecklistId,
-        stage_index: 1,
+        stage_index: stageIndex,
         total_stages: stages.length || 1,
         stage_result: stageResult,
         status: status,
@@ -780,10 +816,27 @@ function AddEQCWizardModal({
         witness_photos: witnessPhotos,
         drawing_photos: drawingPhotos,
         inspection_data: results,
+        // Per-stage summary so the detail view can show each stage on its own tab
+        stage_data: {
+          stage_id: stages[stageIndex - 1]?.id,
+          stage_index: stageIndex,
+          name: stageName,
+          stage_result: stageResult,
+          completed_at: now,
+          synced_at: now,
+          time_taken: '12 mins',
+          geo_tag: '19.0760° N, 72.8777° E',
+          maker_team: selectedMakerTeam,
+          witnesses: selectedWitnesses,
+          witness_photos: witnessPhotos,
+          drawing_photos: drawingPhotos,
+          total_checkpoints: results.length,
+          passed_checkpoints: results.filter((r) => r.response === 'Yes').length,
+        },
         geo_tag: '19.0760° N, 72.8777° E',
         time_taken: '12 mins',
-        completed_at: new Date().toISOString(),
-        synced_at: new Date().toISOString(),
+        completed_at: now,
+        synced_at: now,
         inspector_name: 'Inspector',
       };
 
@@ -1015,7 +1068,7 @@ function AddEQCWizardModal({
                     {selectedChecklist?.name || 'Inspection'}
                   </h2>
                   <p className="text-xs text-gray-500">
-                    Stage 1: {stages[0]?.name || 'Execution Check'}
+                    Stage {stageIndex} of {stages.length || 1}: {stages[stageIndex - 1]?.name || 'Execution Check'}
                   </p>
                 </div>
               </div>
@@ -1047,16 +1100,16 @@ function AddEQCWizardModal({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">
-                    Inspection Witness {stages[0]?.witness_required && <span className="text-rose-500 font-bold ml-0.5">*</span>}
+                    Inspection Witness {stages[stageIndex - 1]?.witness_required && <span className="text-rose-500 font-bold ml-0.5">*</span>}
                   </label>
-                  {stages[0]?.witness_required && (
+                  {stages[stageIndex - 1]?.witness_required && (
                     <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 px-2 py-0.5 rounded-full">
                       Required *
                     </span>
                   )}
                 </div>
                 <div className={`flex flex-wrap gap-2 p-2 rounded-2xl transition-all ${
-                  submittedAttempt && stages[0]?.witness_required && selectedWitnesses.length === 0
+                  submittedAttempt && stages[stageIndex - 1]?.witness_required && selectedWitnesses.length === 0
                     ? 'border-2 border-rose-400 bg-rose-50/30 dark:bg-rose-500/10'
                     : ''
                 }`}>
@@ -1086,7 +1139,7 @@ function AddEQCWizardModal({
                   })}
                 </div>
 
-                {submittedAttempt && stages[0]?.witness_required && selectedWitnesses.length === 0 && (
+                {submittedAttempt && stages[stageIndex - 1]?.witness_required && selectedWitnesses.length === 0 && (
                   <p className="text-[11px] text-rose-500 font-semibold flex items-center gap-1 pl-1">
                     <AlertCircle size={12} /> Please select at least one inspection witness
                   </p>
@@ -1128,27 +1181,27 @@ function AddEQCWizardModal({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">
-                    Drawing Details {stages[0]?.drawing_required && <span className="text-rose-500 font-bold ml-0.5">*</span>}
+                    Drawing Details {stages[stageIndex - 1]?.drawing_required && <span className="text-rose-500 font-bold ml-0.5">*</span>}
                   </label>
-                  {stages[0]?.drawing_required && (
+                  {stages[stageIndex - 1]?.drawing_required && (
                     <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 px-2 py-0.5 rounded-full">
                       Required *
                     </span>
                   )}
                 </div>
                 <div className={`flex flex-wrap items-center gap-3 p-2 rounded-2xl transition-all ${
-                  submittedAttempt && stages[0]?.drawing_required && drawingPhotos.length === 0
+                  submittedAttempt && stages[stageIndex - 1]?.drawing_required && drawingPhotos.length === 0
                     ? 'border-2 border-rose-400 bg-rose-50/30 dark:bg-rose-500/10'
                     : ''
                 }`}>
                   <label className={`flex items-center gap-2 px-3 py-2 border rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer text-xs font-semibold transition-colors ${
-                    submittedAttempt && stages[0]?.drawing_required && drawingPhotos.length === 0
+                    submittedAttempt && stages[stageIndex - 1]?.drawing_required && drawingPhotos.length === 0
                       ? 'border-rose-400 bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'
                       : 'border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300'
                   }`}>
-                    <FileText size={14} className={stages[0]?.drawing_required ? 'text-rose-500' : 'text-teal-600 dark:text-teal-400'} />
+                    <FileText size={14} className={stages[stageIndex - 1]?.drawing_required ? 'text-rose-500' : 'text-teal-600 dark:text-teal-400'} />
                     <span>+ Add Drawing Photo</span>
-                    {stages[0]?.drawing_required && <span className="text-rose-500 font-bold">*</span>}
+                    {stages[stageIndex - 1]?.drawing_required && <span className="text-rose-500 font-bold">*</span>}
                     <input
                       type="file"
                       accept="image/*"
@@ -1173,7 +1226,7 @@ function AddEQCWizardModal({
                   ))}
                 </div>
 
-                {submittedAttempt && stages[0]?.drawing_required && drawingPhotos.length === 0 && (
+                {submittedAttempt && stages[stageIndex - 1]?.drawing_required && drawingPhotos.length === 0 && (
                   <p className="text-[11px] text-rose-500 font-semibold flex items-center gap-1 pl-1">
                     <AlertCircle size={12} /> Drawing details photo is required for this stage
                   </p>
@@ -1438,6 +1491,7 @@ function InspectionDetailModal({
   // Checklist stages + checkpoints for the checklist this EQC ran against, so
   // recorded responses can be shown stage-wise
   const [stageDefs, setStageDefs] = useState<ChecklistStage[]>([]);
+  const [checkpointDefs, setCheckpointDefs] = useState<Checkpoint[]>([]);
   const [checkpointStageMap, setCheckpointStageMap] = useState<Record<string, string>>({});
 
   // Close modal or enlarged photo on Escape key press, lock background scroll
@@ -1478,6 +1532,7 @@ function InspectionDetailModal({
     let cancelled = false;
     if (!inspection.checklist_id) {
       setStageDefs([]);
+      setCheckpointDefs([]);
       setCheckpointStageMap({});
       return;
     }
@@ -1487,16 +1542,17 @@ function InspectionDetailModal({
         const data = await res.json();
         if (cancelled) return;
         setStageDefs(Array.isArray(data?.stages) ? data.stages : []);
+        const defs: Checkpoint[] = Array.isArray(data?.checkpoints) ? data.checkpoints : [];
+        setCheckpointDefs(defs);
         const map: Record<string, string> = {};
-        if (Array.isArray(data?.checkpoints)) {
-          data.checkpoints.forEach((cp: Checkpoint) => {
-            if (cp?.id && cp?.stage_id) map[cp.id] = cp.stage_id;
-          });
-        }
+        defs.forEach((cp) => {
+          if (cp?.id && cp?.stage_id) map[cp.id] = cp.stage_id;
+        });
         setCheckpointStageMap(map);
       } catch {
         if (!cancelled) {
           setStageDefs([]);
+          setCheckpointDefs([]);
           setCheckpointStageMap({});
         }
       }
@@ -1509,9 +1565,10 @@ function InspectionDetailModal({
   /**
    * Group the recorded checkpoints into stages.
    * A checkpoint is matched to its stage by its recorded stage_id, or by the
-   * checklist's own checkpoint→stage mapping. Anything still unmatched is
-   * spread across the stages in order, so older inspections without stage
-   * ids also render stage-wise.
+   * checklist's own checkpoint→stage mapping. A stage that has not been
+   * inspected yet still lists the checkpoints it will ask for, and anything
+   * left unmatched is spread across the stages in order so older inspections
+   * without stage ids also render stage-wise.
    */
   const stageGroups = (() => {
     const totalStages = Math.max(inspection.total_stages || 1, stageDefs.length, 1);
@@ -1525,7 +1582,8 @@ function InspectionDetailModal({
         total: totalStages,
         witnessRequired: !!def?.witness_required,
         drawingRequired: !!def?.drawing_required,
-        checkpoints: [] as CheckpointResult[],
+        recorded: [] as CheckpointResult[],
+        expected: 0,
       };
     });
 
@@ -1534,7 +1592,7 @@ function InspectionDetailModal({
       const stageId = cp.stage_id || (cp.checkpoint_id ? checkpointStageMap[cp.checkpoint_id] : undefined);
       const pos = stageId ? groups.findIndex((g) => g.key === stageId) : -1;
       if (pos >= 0) {
-        groups[pos].checkpoints.push(cp);
+        groups[pos].recorded.push(cp);
       } else {
         unassigned.push(cp);
       }
@@ -1542,14 +1600,43 @@ function InspectionDetailModal({
 
     // Spread checkpoints with no stage reference across the stages in order
     if (unassigned.length > 0) {
-      const open = groups.filter((g) => g.checkpoints.length === 0);
+      const open = groups.filter((g) => g.recorded.length === 0);
       const targets = open.length > 0 ? open : groups;
       unassigned.forEach((cp, i) => {
-        targets[i % targets.length].checkpoints.push(cp);
+        targets[i % targets.length].recorded.push(cp);
       });
     }
 
-    return groups;
+    // How many checkpoints each stage will ask for, and the placeholders for
+    // the ones the inspector has not reached yet.
+    const defsByStage = new Map<string, Checkpoint[]>();
+    checkpointDefs.forEach((cp) => {
+      const list = defsByStage.get(cp.stage_id) ?? [];
+      list.push(cp);
+      defsByStage.set(cp.stage_id, list);
+    });
+
+    return groups.map((g) => {
+      const answered = new Set(g.recorded.map((cp) => cp.checkpoint_id).filter(Boolean));
+      const pending: CheckpointResult[] = (defsByStage.get(g.key) ?? [])
+        .filter((cp) => !answered.has(cp.id))
+        .sort((a, b) => (a.sr_no || 0) - (b.sr_no || 0))
+        .map((cp) => ({
+          checkpoint_id: cp.id,
+          stage_id: cp.stage_id,
+          sr_no: cp.sr_no,
+          question: cp.question,
+          response: '',
+          status: 'pending' as const,
+        }));
+
+      return {
+        ...g,
+        recorded: g.recorded.sort((a, b) => (a.sr_no || 0) - (b.sr_no || 0)),
+        checkpoints: [...g.recorded, ...pending],
+        expected: g.recorded.length + pending.length,
+      };
+    });
   })();
 
   const stageCount = stageGroups.length;
@@ -1562,12 +1649,40 @@ function InspectionDetailModal({
     skip: cps.filter((c) => c.response !== 'Yes' && c.response !== 'No').length,
   });
 
-  const witnessList = Array.isArray(inspection.witness_types) && inspection.witness_types.length > 0
-    ? inspection.witness_types
-    : ['Client', 'Contractor'];
+  // Per-stage summary recorded when that stage was submitted; older entries that
+  // predate stage-wise storage fall back to the row-level values.
+  const stageSummaries: EQCStageData[] = Array.isArray(inspection.stages_data) ? inspection.stages_data : [];
+  const activeStageSummary =
+    stageSummaries.find((s) => Number(s.stage_index) === Number(activeStage?.index)) ??
+    stageSummaries.find((s) => s.stage_id && s.stage_id === activeStage?.key) ??
+    null;
 
-  const completedTime = inspection.completed_at || inspection.inspected_at || inspection.created_at;
-  const syncedTime = inspection.synced_at || inspection.inspected_at || inspection.created_at;
+  const stageResultOf = (stage: typeof activeStage, summary: EQCStageData | null) => {
+    const stats = stageStats(stage?.checkpoints ?? []);
+    if (stats.fail > 0) return 'fail';
+    if (stats.pass > 0 || summary) return 'pass';
+    return 'pending';
+  };
+  const activeResult = stageResultOf(activeStage, activeStageSummary);
+
+  const witnessList =
+    (activeStageSummary?.witnesses?.length ? activeStageSummary.witnesses : null) ??
+    (Array.isArray(inspection.witness_types) && inspection.witness_types.length > 0
+      ? inspection.witness_types
+      : []);
+
+  const witnessPhotos = activeStageSummary?.witness_photos ?? inspection.witness_photos ?? [];
+  const drawingPhotos = activeStageSummary?.drawing_photos ?? inspection.drawing_photos ?? [];
+
+  const completedTime =
+    activeStageSummary?.completed_at || inspection.completed_at || inspection.inspected_at || inspection.created_at;
+  const syncedTime =
+    activeStageSummary?.synced_at || inspection.synced_at || inspection.inspected_at || inspection.created_at;
+  const geoTag = activeStageSummary?.geo_tag || inspection.geo_tag || '';
+  const timeTaken = activeStageSummary?.time_taken || inspection.time_taken || '';
+  const makerTeam = activeStageSummary?.maker_team || inspection.maker_team || '';
+  const inspectedBy = activeStageSummary?.inspector_name || inspection.inspector_display_name || inspection.inspector_name || 'Inspector';
+  const inspectedByTeam = activeStageSummary?.inspector_team || inspection.inspector_team || '';
 
   return (
     <div
@@ -1693,7 +1808,7 @@ function InspectionDetailModal({
           {/* 2. Stage tabs */}
           <div className="flex items-center gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800">
             {stageGroups.map((stage, idx) => {
-              const stats = stageStats(stage.checkpoints);
+              const stats = stageStats(stage.recorded);
               const isActive = idx === Math.min(activeStageIndex, stageCount - 1);
               return (
                 <button
@@ -1704,19 +1819,19 @@ function InspectionDetailModal({
                       ? 'border-teal-600 text-teal-700 dark:text-teal-400 bg-teal-50/60 dark:bg-teal-500/10'
                       : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800/50'
                   }`}
-                  title={`${stage.name} — ${stage.checkpoints.length} checkpoint(s)`}
+                  title={`${stage.name} — ${stats.pass} of ${stage.expected} checkpoint(s) passed`}
                 >
                   <span className="truncate max-w-[190px]">{stage.name}</span>
                   <span
                     className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                       stats.fail > 0
                         ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400'
-                        : stats.pass > 0
+                        : stage.recorded.length > 0
                         ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-400'
                         : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400'
                     }`}
                   >
-                    {stats.pass}/{stage.checkpoints.length}
+                    {stats.pass}/{stage.expected}
                   </span>
                 </button>
               );
@@ -1738,18 +1853,14 @@ function InspectionDetailModal({
               <div className="flex items-center gap-2">
                 <span
                   className={`badge text-[11px] ${
-                    stageStats(activeCheckpoints).fail > 0
+                    activeResult === 'fail'
                       ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400'
-                      : activeCheckpoints.length > 0
+                      : activeResult === 'pass'
                       ? 'badge-active'
                       : 'badge-on_hold'
                   }`}
                 >
-                  {stageStats(activeCheckpoints).fail > 0
-                    ? 'Failed'
-                    : activeCheckpoints.length > 0
-                    ? 'Pass'
-                    : 'Pending'}
+                  {activeResult === 'fail' ? 'Failed' : activeResult === 'pass' ? 'Pass' : 'Pending'}
                 </span>
                 <button
                   onClick={() => window.print()}
@@ -1765,14 +1876,14 @@ function InspectionDetailModal({
                 <p className="text-gray-400 font-medium">Inspected By</p>
                 <div className="flex items-center gap-2 mt-1">
                   <div className="w-6 h-6 rounded-full bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold text-[10px] shrink-0">
-                    {(inspection.inspector_display_name || inspection.inspector_name || 'A')[0].toUpperCase()}
+                    {inspectedBy[0].toUpperCase()}
                   </div>
                   <span className="font-semibold text-gray-900 dark:text-white">
-                    {inspection.inspector_display_name || inspection.inspector_name || 'Inspector'}
+                    {inspectedBy}
                   </span>
                 </div>
-                {inspection.inspector_team && (
-                  <p className="text-[11px] text-gray-400 mt-1 pl-8">{inspection.inspector_team}</p>
+                {inspectedByTeam && (
+                  <p className="text-[11px] text-gray-400 mt-1 pl-8">{inspectedByTeam}</p>
                 )}
               </div>
 
@@ -1794,7 +1905,7 @@ function InspectionDetailModal({
                 <p className="text-gray-400 font-medium">Geo Tag</p>
                 <div className="flex items-center gap-1 font-mono text-gray-700 dark:text-gray-300 mt-1">
                   <MapPin size={12} className="text-teal-600 shrink-0" />
-                  <span>{inspection.geo_tag || '—'}</span>
+                  <span>{geoTag || '—'}</span>
                 </div>
               </div>
 
@@ -1802,14 +1913,14 @@ function InspectionDetailModal({
                 <p className="text-gray-400 font-medium">Time Taken</p>
                 <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300 mt-1">
                   <Clock size={12} className="text-teal-600 shrink-0" />
-                  <span>{inspection.time_taken || '—'}</span>
+                  <span>{timeTaken || '—'}</span>
                 </div>
               </div>
 
               <div>
                 <p className="text-gray-400 font-medium">Maker Team</p>
                 <p className="font-semibold text-gray-800 dark:text-gray-200 mt-1">
-                  {inspection.maker_team || '—'}
+                  {makerTeam || '—'}
                 </p>
               </div>
 
@@ -1817,29 +1928,29 @@ function InspectionDetailModal({
                 <p className="text-gray-400 font-medium">Stage Status</p>
                 <span
                   className={`badge text-[11px] mt-1 inline-block ${
-                    stageStats(activeCheckpoints).fail > 0
+                    activeResult === 'fail'
                       ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400'
-                      : activeCheckpoints.length > 0
+                      : activeResult === 'pass'
                       ? 'badge-active'
                       : 'badge-on_hold'
                   }`}
                 >
-                  {stageStats(activeCheckpoints).fail > 0
-                    ? 'Fail'
-                    : activeCheckpoints.length > 0
-                    ? 'Pass'
-                    : 'Pending'}
+                  {activeResult === 'fail' ? 'Fail' : activeResult === 'pass' ? 'Pass' : 'Pending'}
                 </span>
               </div>
 
               <div>
                 <p className="text-gray-400 font-medium">Witnesses</p>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {witnessList.map((w, idx) => (
-                    <span key={idx} className="px-2 py-0.5 bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-200/50 dark:border-teal-500/20 rounded-full text-[10px] font-medium">
-                      {w}
-                    </span>
-                  ))}
+                  {witnessList.length > 0 ? (
+                    witnessList.map((w, idx) => (
+                      <span key={idx} className="px-2 py-0.5 bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-200/50 dark:border-teal-500/20 rounded-full text-[10px] font-medium">
+                        {w}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1848,9 +1959,9 @@ function InspectionDetailModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-gray-100 dark:border-gray-800">
               <div>
                 <p className="text-xs font-bold text-gray-400 mb-2">Witness Photos</p>
-                {inspection.witness_photos && inspection.witness_photos.length > 0 ? (
+                {witnessPhotos.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    {inspection.witness_photos.map((photo, pi) => (
+                    {witnessPhotos.map((photo, pi) => (
                       <button
                         key={pi}
                         onClick={() => setEnlargedImage(photo)}
@@ -1868,9 +1979,9 @@ function InspectionDetailModal({
 
               <div>
                 <p className="text-xs font-bold text-gray-400 mb-2">Drawing Details</p>
-                {inspection.drawing_photos && inspection.drawing_photos.length > 0 ? (
+                {drawingPhotos.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    {inspection.drawing_photos.map((photo, pi) => (
+                    {drawingPhotos.map((photo, pi) => (
                       <button
                         key={pi}
                         onClick={() => setEnlargedImage(photo)}
@@ -1911,6 +2022,7 @@ function InspectionDetailModal({
                   {activeCheckpoints.map((cp, idx) => {
                     const passed = cp.response === 'Yes';
                     const failed = cp.response === 'No';
+                    const answered = !!cp.response;
                     return (
                       <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40">
                         <td className="px-4 py-3 font-semibold text-gray-400">{cp.sr_no || idx + 1}</td>
@@ -1918,30 +2030,44 @@ function InspectionDetailModal({
                           {cp.question}
                         </td>
                         <td className="px-4 py-3">
-                          <span
-                            className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-block ${
-                              passed
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
-                                : failed
-                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
-                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
-                            }`}
-                          >
-                            {cp.response || 'Yes'}
-                          </span>
+                          {answered ? (
+                            <span
+                              className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-block ${
+                                passed
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
+                                  : failed
+                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+                                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                              }`}
+                            >
+                              {cp.response}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
-                          <span
-                            className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-block ${
-                              failed
-                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+                          {answered ? (
+                            <span
+                              className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-block ${
+                                failed
+                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+                                  : passed
+                                  ? 'bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300'
+                              }`}
+                            >
+                              {cp.status
+                                ? cp.status.charAt(0).toUpperCase() + cp.status.slice(1)
+                                : failed
+                                ? 'Fail'
                                 : passed
-                                ? 'bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300'
-                            }`}
-                          >
-                            {cp.status ? cp.status.charAt(0).toUpperCase() + cp.status.slice(1) : failed ? 'Fail' : passed ? 'Pass' : 'Skip'}
-                          </span>
+                                ? 'Pass'
+                                : 'Skip'}
+                            </span>
+                          ) : (
+                            <span className="badge badge-on_hold text-[10px]">Pending</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
                           {cp.remark?.trim() ? cp.remark : '—'}
@@ -1980,7 +2106,7 @@ function InspectionDetailModal({
                   {activeCheckpoints.length === 0 && (
                     <tr>
                       <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
-                        No checkpoints recorded for this stage
+                        No checkpoints defined for this stage
                       </td>
                     </tr>
                   )}

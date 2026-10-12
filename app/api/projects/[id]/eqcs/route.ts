@@ -24,6 +24,7 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
     const userId = searchParams.get('user_id');
     const makerTeam = searchParams.get('maker_team');
     const stageStatus = searchParams.get('stage_status');
+    const location = searchParams.get('location');
     const q = searchParams.get('q')?.toLowerCase().trim();
 
     const where: string[] = ['e.project_id = $1'];
@@ -53,6 +54,10 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
     if (stageStatus && stageStatus !== 'all') {
       params.push(stageStatus);
       where.push(`e.stage_result = $${params.length}`);
+    }
+    if (location) {
+      params.push(location);
+      where.push(`e.location = $${params.length}`);
     }
     if (q) {
       params.push(`%${q}%`);
@@ -92,52 +97,153 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     const rows = body.rows ?? [body];
 
     for (const r of rows) {
-      const stageResult = r.stage_result ?? 'pass';
-      const status = r.status ?? (stageResult === 'fail' ? 'failed' : 'passed');
-      const inspectedAt = r.inspected_at ?? new Date().toISOString();
-      const completedAt = r.completed_at ?? new Date().toISOString();
-      const syncedAt = r.synced_at ?? new Date().toISOString();
+      const location = r.location ?? '';
+      const checklistId = r.checklist_id ?? null;
       const inspectorName = r.inspector_name ?? payload.email?.split('@')[0] ?? 'Admin';
+      const now = new Date().toISOString();
+      const completedAt = r.completed_at ?? now;
+      const syncedAt = r.synced_at ?? now;
 
-      await orgQuery(
+      const incomingCheckpoints: any[] = Array.isArray(r.inspection_data) ? r.inspection_data : [];
+      const incomingStage: any = r.stage_data && typeof r.stage_data === 'object' ? r.stage_data : null;
+      const submittedStageIndex = Number(r.stage_index) || Number(incomingStage?.stage_index) || 1;
+      const incomingTotal = Number(r.total_stages) || 1;
+
+      // An existing entry that still has stages left is continued rather than
+      // duplicated, so one row carries every stage of an inspection.
+      const { rows: existingRows } = await orgQuery(
         payload.orgId!,
-        `INSERT INTO eqcs
-           (project_id, location, checklist_id, stage_index, total_stages,
-            stage_result, approver_id, approver_log, status, inspected_by,
-            inspected_at, rfi_id, notes, assigned_user_ids, assigned_team_ids,
-            maker_team, witness_types, witness_photos, drawing_photos,
-            inspection_data, geo_tag, time_taken, completed_at, synced_at,
-            inspector_name, inspector_team)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)`,
-        [
-          id,
-          r.location ?? '',
-          r.checklist_id ?? null,
-          r.stage_index ?? 1,
-          r.total_stages ?? 1,
-          stageResult,
-          r.approver_id ?? null,
-          r.approver_log ?? '',
-          status,
-          r.inspected_by ?? (payload.userId || null),
-          inspectedAt,
-          r.rfi_id ?? null,
-          r.notes ?? '',
-          r.assigned_user_ids ?? [],
-          r.assigned_team_ids ?? [],
-          r.maker_team ?? '',
-          r.witness_types ?? [],
-          r.witness_photos ?? [],
-          r.drawing_photos ?? [],
-          JSON.stringify(r.inspection_data ?? []),
-          r.geo_tag ?? '19.0760° N, 72.8777° E',
-          r.time_taken ?? '12 mins',
-          completedAt,
-          syncedAt,
-          inspectorName,
-          r.inspector_team ?? '',
-        ]
+        `SELECT id, total_stages, inspection_data, stages_data
+         FROM eqcs
+         WHERE project_id = $1
+           AND COALESCE(checklist_id::text, '') = COALESCE($2::text, '')
+           AND location = $3
+           AND stage_result = 'pending'
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [id, checklistId, location]
       );
+      const existing = existingRows[0] ?? null;
+
+      const parseJsonArray = (value: unknown): any[] => {
+        if (Array.isArray(value)) return value;
+        if (typeof value === 'string') {
+          try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        }
+        return [];
+      };
+
+      // Merge checkpoint results, replacing anything already recorded for the
+      // same checkpoint so re-inspecting a stage overwrites its answers.
+      const replacedIds = new Set(
+        incomingCheckpoints.map((c) => c?.checkpoint_id).filter(Boolean)
+      );
+      const mergedCheckpoints = [
+        ...parseJsonArray(existing?.inspection_data).filter(
+          (c) => !c?.checkpoint_id || !replacedIds.has(c.checkpoint_id)
+        ),
+        ...incomingCheckpoints,
+      ];
+
+      // Same for the per-stage summaries, keyed by stage index.
+      const previousStages = parseJsonArray(existing?.stages_data);
+      const mergedStages = incomingStage
+        ? [
+            ...previousStages.filter((s) => Number(s?.stage_index) !== submittedStageIndex),
+            { ...incomingStage, stage_index: submittedStageIndex },
+          ].sort((a, b) => Number(a.stage_index) - Number(b.stage_index))
+        : previousStages;
+
+      const totalStages = existing
+        ? Math.max(Number(existing.total_stages) || 1, incomingTotal)
+        : incomingTotal;
+      const allStagesDone = submittedStageIndex >= totalStages;
+      const anyFail = mergedCheckpoints.some((c) => c?.response === 'No');
+      const stageResult = allStagesDone ? (anyFail ? 'fail' : 'pass') : 'pending';
+      const status = allStagesDone ? (anyFail ? 'failed' : 'passed') : 'pending';
+      // While stages remain, the entry reports the stage now in progress.
+      const runningStageIndex = allStagesDone ? submittedStageIndex : submittedStageIndex + 1;
+
+      if (existing) {
+        await orgQuery(
+          payload.orgId!,
+          `UPDATE eqcs SET
+             stage_index = $1, total_stages = $2, stage_result = $3, status = $4,
+             inspection_data = $5::jsonb, stages_data = $6::jsonb,
+             maker_team = $7, witness_types = $8, witness_photos = $9, drawing_photos = $10,
+             geo_tag = $11, time_taken = $12, completed_at = $13, synced_at = $14,
+             inspector_name = $15, inspector_team = $16,
+             inspected_by = COALESCE($17, inspected_by), inspected_at = $13
+           WHERE id = $18 AND project_id = $19`,
+          [
+            runningStageIndex,
+            totalStages,
+            stageResult,
+            status,
+            JSON.stringify(mergedCheckpoints),
+            JSON.stringify(mergedStages),
+            r.maker_team ?? '',
+            r.witness_types ?? [],
+            r.witness_photos ?? [],
+            r.drawing_photos ?? [],
+            r.geo_tag ?? '',
+            r.time_taken ?? '',
+            completedAt,
+            syncedAt,
+            inspectorName,
+            r.inspector_team ?? '',
+            r.inspected_by ?? (payload.userId || null),
+            existing.id,
+            id,
+          ]
+        );
+      } else {
+        await orgQuery(
+          payload.orgId!,
+          `INSERT INTO eqcs
+             (project_id, location, checklist_id, stage_index, total_stages,
+              stage_result, approver_id, approver_log, status, inspected_by,
+              inspected_at, rfi_id, notes, assigned_user_ids, assigned_team_ids,
+              maker_team, witness_types, witness_photos, drawing_photos,
+              inspection_data, stages_data, geo_tag, time_taken, completed_at, synced_at,
+              inspector_name, inspector_team)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+          [
+            id,
+            location,
+            checklistId,
+            runningStageIndex,
+            totalStages,
+            stageResult,
+            r.approver_id ?? null,
+            r.approver_log ?? '',
+            status,
+            r.inspected_by ?? (payload.userId || null),
+            r.inspected_at ?? now,
+            r.rfi_id ?? null,
+            r.notes ?? '',
+            r.assigned_user_ids ?? [],
+            r.assigned_team_ids ?? [],
+            r.maker_team ?? '',
+            r.witness_types ?? [],
+            r.witness_photos ?? [],
+            r.drawing_photos ?? [],
+            JSON.stringify(mergedCheckpoints),
+            JSON.stringify(mergedStages),
+            r.geo_tag ?? '',
+            r.time_taken ?? '',
+            completedAt,
+            syncedAt,
+            inspectorName,
+            r.inspector_team ?? '',
+          ]
+        );
+      }
 
       // Reflect the assignment on the linked teams so the project's Teams tab
       // can show which checklist/user each team was just assigned.

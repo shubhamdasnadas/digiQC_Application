@@ -168,10 +168,35 @@ export interface CheckpointResult {
   sr_no: number;
   question: string;
   response: 'Yes' | 'No' | 'Skip' | string;
-  status?: 'pass' | 'fail' | 'skip';
+  /** 'pending' marks a checkpoint of a stage the inspector has not reached yet. */
+  status?: 'pass' | 'fail' | 'skip' | 'pending';
   remark?: string;
   photos?: string[];
   approver_comment?: string;
+}
+
+/**
+ * Per-stage summary of one inspection entry. A single EQC row accumulates one
+ * of these for every stage the inspector completes, so an inspection is never
+ * split into a separate row per stage.
+ */
+export interface EQCStageData {
+  stage_id?: string;
+  stage_index: number;
+  name: string;
+  stage_result: 'pass' | 'fail' | 'pending';
+  inspector_name?: string;
+  inspector_team?: string;
+  completed_at?: string;
+  synced_at?: string;
+  time_taken?: string;
+  geo_tag?: string;
+  maker_team?: string;
+  witnesses?: string[];
+  witness_photos?: string[];
+  drawing_photos?: string[];
+  total_checkpoints?: number;
+  passed_checkpoints?: number;
 }
 
 export interface EQC {
@@ -204,6 +229,7 @@ export interface EQC {
   witness_photos?: string[];
   drawing_photos?: string[];
   inspection_data?: CheckpointResult[];
+  stages_data?: EQCStageData[];
   geo_tag?: string;
   time_taken?: string;
   completed_at?: string;

@@ -323,6 +323,7 @@ export async function ensurePublicSchemaTables() {
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS witness_photos text[] DEFAULT '{}';
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS drawing_photos text[] DEFAULT '{}';
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS inspection_data jsonb DEFAULT '[]'::jsonb;
+      ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS stages_data jsonb DEFAULT '[]'::jsonb;
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS geo_tag text DEFAULT '';
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS time_taken text DEFAULT '';
       ALTER TABLE public.eqcs ADD COLUMN IF NOT EXISTS completed_at timestamptz;
