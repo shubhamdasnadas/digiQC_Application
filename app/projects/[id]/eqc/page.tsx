@@ -753,6 +753,7 @@ function AddEQCWizardModal({
         const resp = checkpointResponses[idx] || { response: 'Yes', remark: '', photos: [] };
         return {
           checkpoint_id: cp.id,
+          stage_id: cp.stage_id,
           sr_no: cp.sr_no || idx + 1,
           question: cp.question,
           response: resp.response,
@@ -1432,6 +1433,12 @@ function InspectionDetailModal({
   onClose: () => void;
 }) {
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+  const [activeStageIndex, setActiveStageIndex] = useState(0);
+
+  // Checklist stages + checkpoints for the checklist this EQC ran against, so
+  // recorded responses can be shown stage-wise
+  const [stageDefs, setStageDefs] = useState<ChecklistStage[]>([]);
+  const [checkpointStageMap, setCheckpointStageMap] = useState<Record<string, string>>({});
 
   // Close modal or enlarged photo on Escape key press, lock background scroll
   useEffect(() => {
@@ -1466,17 +1473,94 @@ function InspectionDetailModal({
     }
   }
 
-  // If inspection data has no checkpoints, provide representative checkpoints
-  if (parsedCheckpoints.length === 0) {
-    parsedCheckpoints = [
-      { sr_no: 1, question: 'Check reinforcement placement and concrete cover clearance', response: 'Yes', status: 'pass', remark: 'Verified as per structural drawing Rev-2' },
-      { sr_no: 2, question: 'Verify formwork alignment, plumbness, and structural stability', response: 'Yes', status: 'pass', remark: 'Alignment within permissible tolerance' },
-      { sr_no: 3, question: 'Check cleanliness of pour area and removal of debris/slurry', response: 'Yes', status: 'pass', remark: 'Surface cleaned using air compressor' },
-      { sr_no: 4, question: 'Confirm embedded conduits, boxes, and sleeve fixtures positioning', response: 'Yes', status: 'pass', remark: 'MEP conduits secured' },
-      { sr_no: 5, question: 'Inspect dowel bars, lap lengths, and tie-wire anchoring', response: 'Yes', status: 'pass', remark: '50d lap length ensured' },
-      { sr_no: 6, question: 'Review safety barriers, working platforms, and access points', response: 'Yes', status: 'pass', remark: 'Safety scaffolding cleared' },
-    ];
-  }
+  // Load the checklist's stage definitions so checkpoints can be shown stage-wise
+  useEffect(() => {
+    let cancelled = false;
+    if (!inspection.checklist_id) {
+      setStageDefs([]);
+      setCheckpointStageMap({});
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(`/api/checklists/${inspection.checklist_id}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setStageDefs(Array.isArray(data?.stages) ? data.stages : []);
+        const map: Record<string, string> = {};
+        if (Array.isArray(data?.checkpoints)) {
+          data.checkpoints.forEach((cp: Checkpoint) => {
+            if (cp?.id && cp?.stage_id) map[cp.id] = cp.stage_id;
+          });
+        }
+        setCheckpointStageMap(map);
+      } catch {
+        if (!cancelled) {
+          setStageDefs([]);
+          setCheckpointStageMap({});
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [inspection.checklist_id]);
+
+  /**
+   * Group the recorded checkpoints into stages.
+   * A checkpoint is matched to its stage by its recorded stage_id, or by the
+   * checklist's own checkpoint→stage mapping. Anything still unmatched is
+   * spread across the stages in order, so older inspections without stage
+   * ids also render stage-wise.
+   */
+  const stageGroups = (() => {
+    const totalStages = Math.max(inspection.total_stages || 1, stageDefs.length, 1);
+
+    const groups = Array.from({ length: totalStages }, (_, i) => {
+      const def = stageDefs[i];
+      return {
+        key: def?.id ?? `stage-${i + 1}`,
+        name: def?.name || `Stage ${i + 1}`,
+        index: def?.index ?? def?.sr_no ?? i + 1,
+        total: totalStages,
+        witnessRequired: !!def?.witness_required,
+        drawingRequired: !!def?.drawing_required,
+        checkpoints: [] as CheckpointResult[],
+      };
+    });
+
+    const unassigned: CheckpointResult[] = [];
+    parsedCheckpoints.forEach((cp) => {
+      const stageId = cp.stage_id || (cp.checkpoint_id ? checkpointStageMap[cp.checkpoint_id] : undefined);
+      const pos = stageId ? groups.findIndex((g) => g.key === stageId) : -1;
+      if (pos >= 0) {
+        groups[pos].checkpoints.push(cp);
+      } else {
+        unassigned.push(cp);
+      }
+    });
+
+    // Spread checkpoints with no stage reference across the stages in order
+    if (unassigned.length > 0) {
+      const open = groups.filter((g) => g.checkpoints.length === 0);
+      const targets = open.length > 0 ? open : groups;
+      unassigned.forEach((cp, i) => {
+        targets[i % targets.length].checkpoints.push(cp);
+      });
+    }
+
+    return groups;
+  })();
+
+  const stageCount = stageGroups.length;
+  const activeStage = stageGroups[Math.min(activeStageIndex, stageCount - 1)] ?? stageGroups[0];
+  const activeCheckpoints = activeStage?.checkpoints ?? [];
+
+  const stageStats = (cps: CheckpointResult[]) => ({
+    pass: cps.filter((c) => c.response === 'Yes').length,
+    fail: cps.filter((c) => c.response === 'No').length,
+    skip: cps.filter((c) => c.response !== 'Yes' && c.response !== 'No').length,
+  });
 
   const witnessList = Array.isArray(inspection.witness_types) && inspection.witness_types.length > 0
     ? inspection.witness_types
@@ -1517,7 +1601,7 @@ function InspectionDetailModal({
                 <span>Inspections</span>
               </div>
               <h2 className="text-base font-bold text-gray-900 dark:text-white">
-                {inspection.location || 'Inspection Detail'}
+                Inspection Detail
               </h2>
             </div>
           </div>
@@ -1527,13 +1611,13 @@ function InspectionDetailModal({
               onClick={() => window.print()}
               className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3"
             >
-              <Printer size={13} /> Print
+              <Printer size={13} /> Detailed Report
             </button>
             <button
-              onClick={() => alert('Inspection report generated and ready to download.')}
-              className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3 text-teal-600 dark:text-teal-400"
+              onClick={() => window.print()}
+              className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3"
             >
-              <Download size={13} /> Download Report
+              <Download size={13} /> Final Report
             </button>
             <button
               onClick={onClose}
@@ -1547,29 +1631,43 @@ function InspectionDetailModal({
         {/* Modal Body */}
         <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
 
-          {/* 1. Summary Card (Image #21 top section) */}
+          {/* 1. Inspection Summary */}
           <div className="p-5 rounded-2xl bg-white dark:bg-gray-800/70 border border-gray-200 dark:border-gray-800 shadow-sm space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white">Inspection Summary</h3>
+              <button
+                onClick={() => {
+                  const el = document.getElementById('eqc-approver-comment-input');
+                  el?.focus();
+                }}
+                className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3"
+                title="Jump to the approver comment column below"
+              >
+                <FileText size={13} /> Auditor Comments
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+              <div className="min-w-0">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Location</p>
                 <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5 truncate" title={inspection.location}>
                   {inspection.location || '—'}
                 </p>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Checklist</p>
-                <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5">
+                <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5 truncate" title={inspection.checklist_name}>
                   {inspection.checklist_name || 'Quality Inspection'}
                 </p>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">UOM</p>
                 <p className="text-xs font-semibold text-gray-900 dark:text-white mt-0.5">
                   {inspection.checklist_uom || 'Nos'}
                 </p>
               </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</p>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Inspection Status</p>
                 <span
                   className={`badge text-xs mt-0.5 inline-block ${
                     inspection.status === 'passed'
@@ -1582,31 +1680,100 @@ function InspectionDetailModal({
                   {STATUS_LABEL[inspection.status] ?? inspection.status}
                 </span>
               </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Time Taken</p>
+                <div className="flex items-center gap-1 text-xs font-semibold text-gray-900 dark:text-white mt-0.5">
+                  <Clock size={12} className="text-teal-600 shrink-0" />
+                  <span>{inspection.time_taken || '—'}</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* 2. Stage 1 Details Box (Image #21 middle section) */}
+          {/* 2. Stage tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800">
+            {stageGroups.map((stage, idx) => {
+              const stats = stageStats(stage.checkpoints);
+              const isActive = idx === Math.min(activeStageIndex, stageCount - 1);
+              return (
+                <button
+                  key={stage.key}
+                  onClick={() => setActiveStageIndex(idx)}
+                  className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl whitespace-nowrap border-b-2 transition-colors ${
+                    isActive
+                      ? 'border-teal-600 text-teal-700 dark:text-teal-400 bg-teal-50/60 dark:bg-teal-500/10'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                  }`}
+                  title={`${stage.name} — ${stage.checkpoints.length} checkpoint(s)`}
+                >
+                  <span className="truncate max-w-[190px]">{stage.name}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                      stats.fail > 0
+                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400'
+                        : stats.pass > 0
+                        ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-400'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400'
+                    }`}
+                  >
+                    {stats.pass}/{stage.checkpoints.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 3. Active stage details */}
           <div className="p-5 rounded-2xl bg-white dark:bg-gray-800/70 border border-gray-200 dark:border-gray-800 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
-              <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-                Stage 1 Details
-              </h3>
-              <span className="badge badge-active text-[11px]">
-                {inspection.stage_result === 'fail' ? 'Failed' : 'Completed'}
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                  {activeStage?.name || 'Stage'}
+                </h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Stage {activeStage?.index ?? 1} of {stageCount}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span
+                  className={`badge text-[11px] ${
+                    stageStats(activeCheckpoints).fail > 0
+                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400'
+                      : activeCheckpoints.length > 0
+                      ? 'badge-active'
+                      : 'badge-on_hold'
+                  }`}
+                >
+                  {stageStats(activeCheckpoints).fail > 0
+                    ? 'Failed'
+                    : activeCheckpoints.length > 0
+                    ? 'Pass'
+                    : 'Pending'}
+                </span>
+                <button
+                  onClick={() => window.print()}
+                  className="btn-secondary flex items-center gap-1.5 text-[11px] py-1.5 px-3"
+                >
+                  <Download size={12} /> Download Report
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-y-4 gap-x-6 text-xs">
               <div>
                 <p className="text-gray-400 font-medium">Inspected By</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <div className="w-6 h-6 rounded-full bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold text-[10px]">
+                  <div className="w-6 h-6 rounded-full bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold text-[10px] shrink-0">
                     {(inspection.inspector_display_name || inspection.inspector_name || 'A')[0].toUpperCase()}
                   </div>
                   <span className="font-semibold text-gray-900 dark:text-white">
                     {inspection.inspector_display_name || inspection.inspector_name || 'Inspector'}
                   </span>
                 </div>
+                {inspection.inspector_team && (
+                  <p className="text-[11px] text-gray-400 mt-1 pl-8">{inspection.inspector_team}</p>
+                )}
               </div>
 
               <div>
@@ -1624,45 +1791,65 @@ function InspectionDetailModal({
               </div>
 
               <div>
-                <p className="text-gray-400 font-medium">Maker Team</p>
-                <p className="font-semibold text-gray-800 dark:text-gray-200 mt-1">
-                  {inspection.maker_team || 'Civil Execution Team'}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-gray-400 font-medium">Geo Tag / Coordinates</p>
+                <p className="text-gray-400 font-medium">Geo Tag</p>
                 <div className="flex items-center gap-1 font-mono text-gray-700 dark:text-gray-300 mt-1">
-                  <MapPin size={12} className="text-teal-600" />
-                  <span>{inspection.geo_tag || '19.0760° N, 72.8777° E'}</span>
+                  <MapPin size={12} className="text-teal-600 shrink-0" />
+                  <span>{inspection.geo_tag || '—'}</span>
                 </div>
               </div>
 
               <div>
                 <p className="text-gray-400 font-medium">Time Taken</p>
                 <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300 mt-1">
-                  <Clock size={12} className="text-teal-600" />
-                  <span>{inspection.time_taken || '12 mins'}</span>
+                  <Clock size={12} className="text-teal-600 shrink-0" />
+                  <span>{inspection.time_taken || '—'}</span>
                 </div>
               </div>
-            </div>
 
-            {/* Witnesses & Drawing Photos */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-gray-100 dark:border-gray-800">
-              {/* Witnesses */}
               <div>
-                <p className="text-xs font-bold text-gray-400 mb-2">Witnesses Present</p>
-                <div className="flex flex-wrap gap-1.5">
+                <p className="text-gray-400 font-medium">Maker Team</p>
+                <p className="font-semibold text-gray-800 dark:text-gray-200 mt-1">
+                  {inspection.maker_team || '—'}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-gray-400 font-medium">Stage Status</p>
+                <span
+                  className={`badge text-[11px] mt-1 inline-block ${
+                    stageStats(activeCheckpoints).fail > 0
+                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400'
+                      : activeCheckpoints.length > 0
+                      ? 'badge-active'
+                      : 'badge-on_hold'
+                  }`}
+                >
+                  {stageStats(activeCheckpoints).fail > 0
+                    ? 'Fail'
+                    : activeCheckpoints.length > 0
+                    ? 'Pass'
+                    : 'Pending'}
+                </span>
+              </div>
+
+              <div>
+                <p className="text-gray-400 font-medium">Witnesses</p>
+                <div className="flex flex-wrap gap-1 mt-1">
                   {witnessList.map((w, idx) => (
-                    <span key={idx} className="px-2.5 py-0.5 bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-200/50 dark:border-teal-500/20 rounded-full text-[11px] font-medium">
+                    <span key={idx} className="px-2 py-0.5 bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-200/50 dark:border-teal-500/20 rounded-full text-[10px] font-medium">
                       {w}
                     </span>
                   ))}
                 </div>
+              </div>
+            </div>
 
-                {/* Witness photos */}
-                {inspection.witness_photos && inspection.witness_photos.length > 0 && (
-                  <div className="flex items-center gap-2 mt-3">
+            {/* Photos recorded against this stage */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+              <div>
+                <p className="text-xs font-bold text-gray-400 mb-2">Witness Photos</p>
+                {inspection.witness_photos && inspection.witness_photos.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-2">
                     {inspection.witness_photos.map((photo, pi) => (
                       <button
                         key={pi}
@@ -1674,14 +1861,15 @@ function InspectionDetailModal({
                       </button>
                     ))}
                   </div>
+                ) : (
+                  <p className="text-xs text-gray-400">No witness photos attached</p>
                 )}
               </div>
 
-              {/* Drawing Photos */}
               <div>
                 <p className="text-xs font-bold text-gray-400 mb-2">Drawing Details</p>
                 {inspection.drawing_photos && inspection.drawing_photos.length > 0 ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {inspection.drawing_photos.map((photo, pi) => (
                       <button
                         key={pi}
@@ -1700,70 +1888,102 @@ function InspectionDetailModal({
             </div>
           </div>
 
-          {/* 3. Checkpoints Audit Table (Image #21 bottom section) */}
+          {/* 4. Checkpoints of the active stage */}
           <div className="p-5 rounded-2xl bg-white dark:bg-gray-800/70 border border-gray-200 dark:border-gray-800 shadow-sm space-y-3">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-              Checkpoints Audit ({parsedCheckpoints.length})
+              {activeStage?.name || 'Stage'} Checkpoints ({activeCheckpoints.length})
             </h3>
 
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-800">
                   <tr className="text-gray-500 uppercase tracking-wider text-[10px]">
-                    <th className="px-4 py-2.5 text-left font-semibold w-12">SR NO</th>
-                    <th className="px-4 py-2.5 text-left font-semibold">CHECKPOINT / QUESTION</th>
-                    <th className="px-4 py-2.5 text-left font-semibold w-24">RESPONSE</th>
-                    <th className="px-4 py-2.5 text-left font-semibold">REMARKS</th>
-                    <th className="px-4 py-2.5 text-left font-semibold w-20">PHOTOS</th>
-                    <th className="px-4 py-2.5 text-left font-semibold">APPROVER COMMENT</th>
+                    <th className="px-4 py-2.5 text-left font-semibold w-12">#</th>
+                    <th className="px-4 py-2.5 text-left font-semibold">Checkpoint</th>
+                    <th className="px-4 py-2.5 text-left font-semibold w-24">Response</th>
+                    <th className="px-4 py-2.5 text-left font-semibold w-20">Status</th>
+                    <th className="px-4 py-2.5 text-left font-semibold">Remark</th>
+                    <th className="px-4 py-2.5 text-left font-semibold w-24">Photo</th>
+                    <th className="px-4 py-2.5 text-left font-semibold w-28">Approver Comment</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {parsedCheckpoints.map((cp, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40">
-                      <td className="px-4 py-3 font-semibold text-gray-400">{cp.sr_no || idx + 1}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                        {cp.question}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-block ${
-                            cp.response === 'Yes'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
-                              : cp.response === 'No'
-                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
-                              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
-                          }`}
-                        >
-                          {cp.response || 'Yes'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
-                        {cp.remark || '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        {cp.photos && cp.photos.length > 0 ? (
-                          <div className="flex items-center gap-1">
-                            {cp.photos.map((ph, pi) => (
-                              <button
-                                key={pi}
-                                onClick={() => setEnlargedImage(ph)}
-                                className="w-7 h-7 rounded-lg overflow-hidden border border-gray-200 shrink-0"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={ph} alt="CP attachment" className="w-full h-full object-cover" />
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">
-                        {cp.approver_comment || '—'}
+                  {activeCheckpoints.map((cp, idx) => {
+                    const passed = cp.response === 'Yes';
+                    const failed = cp.response === 'No';
+                    return (
+                      <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40">
+                        <td className="px-4 py-3 font-semibold text-gray-400">{cp.sr_no || idx + 1}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                          {cp.question}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-block ${
+                              passed
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
+                                : failed
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                            }`}
+                          >
+                            {cp.response || 'Yes'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-block ${
+                              failed
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+                                : passed
+                                ? 'bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300'
+                            }`}
+                          >
+                            {cp.status ? cp.status.charAt(0).toUpperCase() + cp.status.slice(1) : failed ? 'Fail' : passed ? 'Pass' : 'Skip'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                          {cp.remark?.trim() ? cp.remark : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {cp.photos && cp.photos.length > 0 ? (
+                            <div className="flex items-center gap-1">
+                              {cp.photos.map((ph, pi) => (
+                                <button
+                                  key={pi}
+                                  onClick={() => setEnlargedImage(ph)}
+                                  className="w-7 h-7 rounded-lg overflow-hidden border border-gray-200 shrink-0 hover:scale-105 transition-transform"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={ph} alt="CP attachment" className="w-full h-full object-cover" />
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            id={idx === 0 ? 'eqc-approver-comment-input' : undefined}
+                            type="text"
+                            defaultValue={cp.approver_comment || ''}
+                            placeholder="Add comment…"
+                            className="input py-1 px-2 text-[11px] w-full min-w-[110px] rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {activeCheckpoints.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                        No checkpoints recorded for this stage
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

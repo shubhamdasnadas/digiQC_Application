@@ -164,6 +164,7 @@ export interface Checkpoint {
 
 export interface CheckpointResult {
   checkpoint_id?: string;
+  stage_id?: string;
   sr_no: number;
   question: string;
   response: 'Yes' | 'No' | 'Skip' | string;
