@@ -257,18 +257,54 @@ export interface EQC {
   synced_at?: string;
 }
 
+export interface IssueResponse {
+  id?: string;
+  user_name: string;
+  user_team?: string;
+  date: string;
+  description: string;
+  photos?: string[];
+}
+
 export interface Issue {
   id: string;
   project_id: string;
   title: string;
   description: string;
+  location?: string;
+  issue_type?: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   status: 'open' | 'in_progress' | 'resolved' | 'closed';
   assignee_id: string | null;
+  assignee_name?: string;
+  assigned_team?: string;
+  assigned_team_phone?: string;
   reported_by: string | null;
+  reported_by_name?: string;
+  reported_by_team?: string;
+  image_url?: string;
+  photos?: string[];
+  tags?: string;
+  responded_by?: string;
+  responded_by_name?: string;
+  responded_by_team?: string;
+  responded_at?: string;
+  response_description?: string;
+  response_photos?: string[];
+  responses?: IssueResponse[];
+  closed_by?: string;
+  closed_by_name?: string;
+  closed_by_team?: string;
+  closed_at?: string;
+  closed_description?: string;
+  closed_photos?: string[];
+  geo_tag?: string;
+  rejections?: string;
+  last_action_by?: string;
+  last_action_date?: string;
   due_date: string | null;
   created_at: string;
-  assignee_name?: string;
+  updated_at?: string;
 }
 
 export interface RegisterEntry {

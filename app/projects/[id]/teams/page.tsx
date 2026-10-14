@@ -157,7 +157,7 @@ export default function TeamsTab() {
           {names[0]} <span className="text-xs text-red-500 font-semibold">+{names.length - 1}</span>
         </span>
         <div className="pointer-events-none absolute left-0 top-full z-30 mt-2 w-64 max-w-xs opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 origin-top-left">
-          <div className="rounded-xl bg-gray-900/95 dark:bg-gray-800/95 backdrop-blur-md text-white text-xs leading-relaxed p-3 shadow-2xl border border-gray-750 dark:border-gray-700">
+          <div className="rounded-xl bg-gray-900/95 dark:bg-gray-800/95 backdrop-blur-md text-white text-xs leading-relaxed p-3 shadow-2xl border border-gray-700 dark:border-gray-700">
             <div className="font-semibold text-gray-400 text-[10px] uppercase tracking-wider mb-1.5 border-b border-gray-700/60 pb-1">
               Assigned {label} ({names.length})
             </div>
@@ -835,7 +835,7 @@ function AddTeamWizardModal({
                 {isChecklistDropdownOpen && (
                   <div className="absolute top-full left-0 right-0 z-50 mt-1.5 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-scale-in ring-1 ring-black/5">
                     {/* Search inside Dropdown */}
-                    <div className="p-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-850">
+                    <div className="p-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900">
                       <div className="relative">
                         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
@@ -1051,7 +1051,7 @@ function AddTeamWizardModal({
         </div>
 
         {/* Modal Footer Controls */}
-        <div className="flex items-center justify-between gap-3 p-4 px-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-850 shrink-0">
+        <div className="flex items-center justify-between gap-3 p-4 px-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900 shrink-0">
           {step === 1 ? (
             <>
               <button
@@ -1310,7 +1310,7 @@ function EditTeamModal({
             {/* Dropdown Menu */}
             {isChecklistDropdownOpen && (
               <div className="absolute top-full left-0 right-0 z-50 mt-1.5 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-scale-in ring-1 ring-black/5">
-                <div className="p-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-850">
+                <div className="p-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900">
                   <div className="relative">
                     <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
