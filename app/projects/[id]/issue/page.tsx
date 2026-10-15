@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Pencil,
+  Trash2,
   ArrowUpDown,
   CheckCircle2,
   MessageSquare,
@@ -96,6 +97,7 @@ export default function IssueTab() {
 
   const [loading, setLoading] = useState(true);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [issueToDelete, setIssueToDelete] = useState<Issue | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [showResponseModal, setShowResponseModal] = useState(false);
@@ -491,6 +493,15 @@ export default function IssueTab() {
     }
   };
 
+  // Delete Issue handler
+  const handleIssueDeleted = (deletedId: string) => {
+    setIssues((prev) => prev.filter((i) => i.id !== deletedId));
+    if (selectedIssue?.id === deletedId) {
+      setSelectedIssue(null);
+    }
+    setIssueToDelete(null);
+  };
+
   // Print / Download Report
   const handleDownloadReport = (issueToPrint: Issue | null) => {
     const issue = issueToPrint || selectedIssue;
@@ -823,7 +834,7 @@ export default function IssueTab() {
                     <ArrowUpDown size={11} className="text-gray-400" />
                   </div>
                 </th>
-                <th className="py-3 px-3 w-12 text-center"></th>
+                <th className="py-3 px-3 w-20 text-center"></th>
               </tr>
             </thead>
 
@@ -907,19 +918,32 @@ export default function IssueTab() {
                         {formatDatePipe(issue.last_action_date || issue.created_at)}
                       </td>
 
-                      {/* Action Icon: Circular edit pencil (Image #7 - on click opens pop-up to show detail) */}
+                      {/* Action Icons: Circular edit pencil + Circular trash delete */}
                       <td className="py-3 px-3 text-center whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedIssue(issue);
-                          }}
-                          className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors mx-auto"
-                          title="View / Edit Issue Details"
-                        >
-                          <Pencil size={12} />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedIssue(issue);
+                            }}
+                            className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                            title="View / Edit Issue Details"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIssueToDelete(issue);
+                            }}
+                            className="w-7 h-7 rounded-full bg-gray-100 hover:bg-rose-50 dark:bg-gray-800 dark:hover:bg-rose-950/40 flex items-center justify-center text-gray-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
+                            title="Delete Issue"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1008,6 +1032,7 @@ export default function IssueTab() {
             setSelectedIssue(updated);
             setIssues((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
           }}
+          onDeleteIssue={() => setIssueToDelete(selectedIssue)}
           onDownloadReport={() => handleDownloadReport(selectedIssue)}
           onOpenCloseModal={() => setShowCloseModal(true)}
           onOpenResponseModal={() => setShowResponseModal(true)}
@@ -1052,6 +1077,16 @@ export default function IssueTab() {
         />
       )}
 
+      {/* Modal: Delete Issue Confirmation */}
+      {issueToDelete && (
+        <DeleteIssueModal
+          issue={issueToDelete}
+          projectId={id}
+          onClose={() => setIssueToDelete(null)}
+          onDeleted={handleIssueDeleted}
+        />
+      )}
+
       {/* Enlarge Image Lightbox */}
       {enlargedImage && (
         <div
@@ -1091,6 +1126,7 @@ function IssueDetailModal({
   renderStatusPill,
   onClose,
   onUpdated,
+  onDeleteIssue,
   onDownloadReport,
   onOpenCloseModal,
   onOpenResponseModal,
@@ -1105,6 +1141,7 @@ function IssueDetailModal({
   renderStatusPill: (status: string) => React.ReactNode;
   onClose: () => void;
   onUpdated: (updated: Issue) => void;
+  onDeleteIssue?: () => void;
   onDownloadReport: () => void;
   onOpenCloseModal: () => void;
   onOpenResponseModal: () => void;
@@ -1282,6 +1319,17 @@ function IssueDetailModal({
               <Download size={13} />
               <span className="hidden sm:inline">Download</span>
             </button>
+
+            {onDeleteIssue && (
+              <button
+                onClick={onDeleteIssue}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium inline-flex items-center gap-1.5 border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
+                title="Delete Issue"
+              >
+                <Trash2 size={13} />
+                <span className="hidden sm:inline">Delete</span>
+              </button>
+            )}
 
             <button
               onClick={onClose}
@@ -2444,3 +2492,101 @@ function AddResponseModal({
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal: Delete Issue Confirmation
+// ─────────────────────────────────────────────────────────────────────────────
+function DeleteIssueModal({
+  issue,
+  projectId,
+  onClose,
+  onDeleted,
+}: {
+  issue: Issue;
+  projectId: string;
+  onClose: () => void;
+  onDeleted: (issueId: string) => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
+  // Close modal on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues?id=${issue.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d?.error || 'Failed to delete issue');
+      }
+      onDeleted(issue.id);
+    } catch (e) {
+      setError((e as Error).message || 'Failed to delete issue');
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl animate-scale-in text-left">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5 text-rose-500">
+            <div className="w-9 h-9 rounded-full bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center">
+              <Trash2 size={18} />
+            </div>
+            <h2 className="text-base font-bold text-gray-900 dark:text-white">Delete Issue</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-4 leading-relaxed">
+          Are you sure you want to delete this issue at{' '}
+          <span className="font-semibold text-gray-900 dark:text-white">
+            {issue.location || 'unnamed location'}
+          </span>{' '}
+          ({issue.issue_type || 'General'})? This action cannot be undone.
+        </p>
+
+        {error && <p className="text-xs text-rose-500 mb-3">{error}</p>}
+
+        <div className="flex gap-2.5">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={deleting}
+            className="flex-1 px-4 py-2 text-xs font-semibold rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirmDelete}
+            disabled={deleting}
+            className="flex-1 px-4 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+            <span>{deleting ? 'Deleting…' : 'Delete'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
