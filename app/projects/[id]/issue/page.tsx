@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Plus,
@@ -2510,16 +2510,8 @@ function DeleteIssueModal({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
-  // Close modal on Escape
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  const confirmDelete = async () => {
+  const confirmDelete = useCallback(async () => {
+    if (deleting) return;
     setDeleting(true);
     setError('');
     try {
@@ -2535,7 +2527,26 @@ function DeleteIssueModal({
       setError((e as Error).message || 'Failed to delete issue');
       setDeleting(false);
     }
-  };
+  }, [deleting, issue.id, projectId, onDeleted]);
+
+  // Keyboard navigation: Escape to cancel, Enter to delete
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      } else if (e.key === 'Enter') {
+        const target = e.target as HTMLElement | null;
+        if (target && target.tagName === 'BUTTON' && target.getAttribute('data-action') === 'cancel') {
+          return;
+        }
+        e.preventDefault();
+        confirmDelete();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, confirmDelete]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -2566,25 +2577,28 @@ function DeleteIssueModal({
 
         {error && <p className="text-xs text-rose-500 mb-3">{error}</p>}
 
-        <div className="flex gap-2.5">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={deleting}
-            className="flex-1 px-4 py-2 text-xs font-semibold rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={confirmDelete}
-            disabled={deleting}
-            className="flex-1 px-4 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-          >
-            {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-            <span>{deleting ? 'Deleting…' : 'Delete'}</span>
-          </button>
-        </div>
+        <form onSubmit={(e) => { e.preventDefault(); confirmDelete(); }}>
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              data-action="cancel"
+              onClick={onClose}
+              disabled={deleting}
+              className="flex-1 px-4 py-2 text-xs font-semibold rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              autoFocus
+              disabled={deleting}
+              className="flex-1 px-4 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 text-white flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+            >
+              {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+              <span>{deleting ? 'Deleting…' : 'Delete'}</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
