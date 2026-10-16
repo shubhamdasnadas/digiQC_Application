@@ -1,0 +1,215 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "digiQC Health Check API",
+    "version": "1.0.0",
+    "description": "Backend health check contract for digiQC. Monitors server status, database connectivity, and system diagnostics."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Check server health",
+        "description": "Verifies whether the HTTP server is on, functioning, and whether the PostgreSQL database is operational.",
+        "responses": {
+          "200": {
+            "description": "Server is ON and fully healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthyResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server is responding, but dependencies (such as PostgreSQL) are degraded or offline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnhealthyResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error during health probe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "summary": "Lightweight health ping",
+        "description": "Quick status check without payload body. Returns header X-Server-Status.",
+        "responses": {
+          "200": {
+            "description": "Server is on and healthy"
+          },
+          "503": {
+            "description": "Server is degraded/unhealthy"
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Check server health (API alias)",
+        "description": "Alias of /health under the /api prefix.",
+        "responses": {
+          "200": {
+            "$ref": "#/paths/~1health/get/responses/200"
+          },
+          "503": {
+            "$ref": "#/paths/~1health/get/responses/503"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ServiceHealth": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["on", "off", "connected", "disconnected", "degraded"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "latencyMs": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["status", "message"]
+      },
+      "HealthyResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "healthy"
+          },
+          "server": {
+            "type": "string",
+            "example": "on"
+          },
+          "message": {
+            "type": "string",
+            "example": "Server is up and running successfully"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uptime": {
+            "type": "number",
+            "example": 120
+          },
+          "uptimeFormatted": {
+            "type": "string",
+            "example": "2m 0s"
+          },
+          "services": {
+            "type": "object",
+            "properties": {
+              "server": {
+                "$ref": "#/components/schemas/ServiceHealth"
+              },
+              "database": {
+                "$ref": "#/components/schemas/ServiceHealth"
+              }
+            },
+            "required": ["server", "database"]
+          },
+          "system": {
+            "type": "object",
+            "properties": {
+              "nodeVersion": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "memory": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "required": ["status", "server", "message", "timestamp", "uptime", "services"]
+      },
+      "UnhealthyResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "unhealthy"
+          },
+          "server": {
+            "type": "string",
+            "example": "degraded"
+          },
+          "message": {
+            "type": "string",
+            "example": "Server is running, but critical dependencies are offline"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Database connection failed: connect ECONNREFUSED 127.0.0.1:5432"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uptime": {
+            "type": "number"
+          },
+          "services": {
+            "type": "object"
+          }
+        },
+        "required": ["status", "server", "message", "reason", "timestamp"]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "unhealthy"
+          },
+          "server": {
+            "type": "string",
+            "example": "off"
+          },
+          "message": {
+            "type": "string",
+            "example": "Server health check encountered an unexpected error"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "required": ["status", "server", "message", "reason"]
+      }
+    }
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "info": {
+    "_postman_id": "b3e942f7-7b19-482d-8b01-a16e25c04df1",
+    "name": "digiQC - Health Check API",
+    "description": "Collection for testing and monitoring the health check endpoints (/health and /api/health) of the digiQC backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check - Root (/health)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "description": "Checks whether the backend server is on/off, operational, and whether vital services like PostgreSQL are connected. If on and healthy, returns HTTP 200 with success message. If degraded/off, returns HTTP 503 with the detailed failure reason."
+      },
+      "response": [
+        {
+          "name": "200 Healthy Response",
+          "originalRequest": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"status\": \"healthy\",\n  \"server\": \"on\",\n  \"message\": \"Server is up and running successfully\",\n  \"timestamp\": \"2026-10-16T10:00:00.000Z\",\n  \"uptime\": 142,\n  \"uptimeFormatted\": \"2m 22s\",\n  \"services\": {\n    \"server\": {\n      \"status\": \"on\",\n      \"message\": \"HTTP server is running and accepting requests\"\n    },\n    \"database\": {\n      \"status\": \"connected\",\n      \"message\": \"PostgreSQL database connection is operational\",\n      \"latencyMs\": 5\n    }\n  },\n  \"system\": {\n    \"nodeVersion\": \"v20.11.0\",\n    \"environment\": \"development\",\n    \"memory\": {\n      \"rss\": \"85 MB\",\n      \"heapTotal\": \"42 MB\",\n      \"heapUsed\": \"29 MB\"\n    }\n  }\n}"
+        },
+        {
+          "name": "503 Degraded/Offline Service Response",
+          "originalRequest": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health"
+            }
+          },
+          "status": "Service Unavailable",
+          "code": 503,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"status\": \"unhealthy\",\n  \"server\": \"degraded\",\n  \"message\": \"Server is running, but critical dependencies are offline\",\n  \"reason\": \"Database connection failed: connect ECONNREFUSED 127.0.0.1:5432\",\n  \"timestamp\": \"2026-10-16T10:00:00.000Z\",\n  \"uptime\": 142,\n  \"uptimeFormatted\": \"2m 22s\",\n  \"services\": {\n    \"server\": {\n      \"status\": \"on\",\n      \"message\": \"HTTP server is running and accepting requests\"\n    },\n    \"database\": {\n      \"status\": \"disconnected\",\n      \"message\": \"PostgreSQL database connection failed\",\n      \"error\": \"connect ECONNREFUSED 127.0.0.1:5432\"\n    }\n  },\n  \"system\": {\n    \"nodeVersion\": \"v20.11.0\",\n    \"environment\": \"development\",\n    \"memory\": {\n      \"rss\": \"85 MB\",\n      \"heapTotal\": \"42 MB\",\n      \"heapUsed\": \"29 MB\"\n    }\n  }\n}"
+        }
+      ],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 (healthy) or 503 (service degraded)\", function () {",
+              "    pm.expect([200, 503]).to.include(pm.response.code);",
+              "});",
+              "",
+              "pm.test(\"Response has correct JSON structure\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json).to.have.property('status');",
+              "    pm.expect(json).to.have.property('server');",
+              "    pm.expect(json).to.have.property('message');",
+              "    pm.expect(json).to.have.property('timestamp');",
+              "    pm.expect(json).to.have.property('uptime');",
+              "    pm.expect(json).to.have.property('services');",
+              "});",
+              "",
+              "pm.test(\"If status is healthy (200), server is on and DB connected\", function () {",
+              "    if (pm.response.code === 200) {",
+              "        const json = pm.response.json();",
+              "        pm.expect(json.status).to.eql('healthy');",
+              "        pm.expect(json.server).to.eql('on');",
+              "        pm.expect(json.services.database.status).to.eql('connected');",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"If status is unhealthy (503), reason is provided\", function () {",
+              "    if (pm.response.code === 503) {",
+              "        const json = pm.response.json();",
+              "        pm.expect(json.status).to.eql('unhealthy');",
+              "        pm.expect(json).to.have.property('reason');",
+              "        pm.expect(json.reason.length).to.be.above(0);",
+              "    }",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check - API Alias (/api/health)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "health"
+          ]
+        },
+        "description": "API-prefixed alias for health monitoring."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"API alias returns valid health check response\", function () {",
+              "    pm.expect([200, 503]).to.include(pm.response.code);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json).to.have.property('status');",
+              "    pm.expect(json).to.have.property('server');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check - Ping (/health HEAD)",
+      "request": {
+        "method": "HEAD",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "description": "Fast ping test without body transfer."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HEAD response code is 200 or 503\", function () {",
+              "    pm.expect([200, 503]).to.include(pm.response.code);",
+              "});",
+              "",
+              "pm.test(\"X-Server-Status header is present\", function () {",
+              "    pm.expect(pm.response.headers.has('X-Server-Status')).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
