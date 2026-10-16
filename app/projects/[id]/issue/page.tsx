@@ -101,7 +101,27 @@ export default function IssueTab() {
   const [showAdd, setShowAdd] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [showResponseModal, setShowResponseModal] = useState(false);
-  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (!lightbox) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightbox(null);
+      } else if (e.key === 'ArrowLeft') {
+        setLightbox((prev) =>
+          prev ? { ...prev, index: (prev.index - 1 + prev.images.length) % prev.images.length } : null
+        );
+      } else if (e.key === 'ArrowRight') {
+        setLightbox((prev) =>
+          prev ? { ...prev, index: (prev.index + 1) % prev.images.length } : null
+        );
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightbox]);
 
   // Filters state (matching Image #5 & #7)
   const [isOverdueFilter, setIsOverdueFilter] = useState(false);
@@ -365,11 +385,16 @@ export default function IssueTab() {
   };
 
   // Close Issue handler
-  const handleCloseIssue = async (closingDescription: string, closingPhotoUrl: string) => {
+  const handleCloseIssue = async (closingDescription: string, closingPhotosInput: string | string[]) => {
     if (!selectedIssue) return;
     const closerName = currentUser?.name || 'Deepesh Dhavan';
     const closerTeam = members.find((m) => m.user_id === currentUser?.id)?.user_teams || 'Main Team';
     const nowIso = new Date().toISOString();
+    const photosArr = Array.isArray(closingPhotosInput)
+      ? closingPhotosInput.filter(Boolean)
+      : closingPhotosInput
+      ? [closingPhotosInput]
+      : [];
 
     const payload = {
       id: selectedIssue.id,
@@ -379,7 +404,7 @@ export default function IssueTab() {
       closed_by_team: closerTeam,
       closed_at: nowIso,
       closed_description: closingDescription,
-      closed_photos: closingPhotoUrl ? [closingPhotoUrl] : [],
+      closed_photos: photosArr,
       last_action_by: closerName,
       last_action_date: nowIso,
     };
@@ -398,7 +423,7 @@ export default function IssueTab() {
           closed_by_team: closerTeam,
           closed_at: nowIso,
           closed_description: closingDescription,
-          closed_photos: closingPhotoUrl ? [closingPhotoUrl] : [],
+          closed_photos: photosArr,
           last_action_by: closerName,
           last_action_date: nowIso,
         };
@@ -412,11 +437,16 @@ export default function IssueTab() {
   };
 
   // Add Response handler
-  const handleAddResponse = async (responseDesc: string, photoUrl: string) => {
+  const handleAddResponse = async (responseDesc: string, photosInput: string | string[]) => {
     if (!selectedIssue) return;
     const responderName = currentUser?.name || 'Admin User';
     const responderTeam = members.find((m) => m.user_id === currentUser?.id)?.user_teams || 'Phone Contact';
     const nowIso = new Date().toISOString();
+    const photosArr = Array.isArray(photosInput)
+      ? photosInput.filter(Boolean)
+      : photosInput
+      ? [photosInput]
+      : [];
 
     const newResponse: IssueResponse = {
       id: 'resp-' + Date.now(),
@@ -424,7 +454,7 @@ export default function IssueTab() {
       user_team: responderTeam,
       date: nowIso,
       description: responseDesc,
-      photos: photoUrl ? [photoUrl] : [],
+      photos: photosArr,
     };
 
     // Parse existing responses
@@ -460,7 +490,7 @@ export default function IssueTab() {
       responded_by_team: responderTeam,
       responded_at: nowIso,
       response_description: responseDesc,
-      response_photos: photoUrl ? [photoUrl] : [],
+      response_photos: photosArr,
       responses: updatedResponses,
       last_action_by: responderName,
       last_action_date: nowIso,
@@ -479,7 +509,7 @@ export default function IssueTab() {
           responded_by_team: responderTeam,
           responded_at: nowIso,
           response_description: responseDesc,
-          response_photos: photoUrl ? [photoUrl] : [],
+          response_photos: photosArr,
           responses: updatedResponses,
           last_action_by: responderName,
           last_action_date: nowIso,
@@ -510,9 +540,19 @@ export default function IssueTab() {
     if (!printWindow) return;
 
     const pName = project?.name || 'Techsec';
-    const issuePhoto = issue.image_url || issue.photos?.[0] || '';
-    const closedPhoto = issue.closed_photos?.[0] || '';
-    const responsePhoto = issue.response_photos?.[0] || '';
+    const issuePhotos = issue.photos && issue.photos.length > 0
+      ? issue.photos
+      : issue.image_urls && issue.image_urls.length > 0
+      ? issue.image_urls
+      : issue.image_url
+      ? [issue.image_url]
+      : [];
+
+    const closedPhotos = Array.isArray(issue.closed_photos)
+      ? issue.closed_photos
+      : typeof issue.closed_photos === 'string' && issue.closed_photos
+      ? [issue.closed_photos]
+      : [];
 
     const html = `
       <!DOCTYPE html>
@@ -541,7 +581,7 @@ export default function IssueTab() {
         <div class="header">
           <div>
             <div class="title">${pName} - Issue Report</div>
-            <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Location: <strong>${issue.location || '-'}</strong> | Type: <strong>${issue.issue_type || 'General'}</strong></div>
+            <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Location: <strong>${issue.location || '-'}</strong> | Type: <strong>${issue.issue_type || issue.tag || 'General'}</strong></div>
           </div>
           <span class="badge ${issue.status === 'closed' ? 'badge-closed' : 'badge-open'}">${issue.status.toUpperCase()}</span>
         </div>
@@ -560,7 +600,7 @@ export default function IssueTab() {
             </div>
             <div>
               <div class="label">Type</div>
-              <div class="val">${issue.issue_type || 'General'}</div>
+              <div class="val">${issue.issue_type || issue.tag || 'General'}</div>
               <div class="label" style="margin-top:12px;">Responded By</div>
               <div class="val">${issue.responded_by_name || '-'} ${issue.responded_by_team ? `[${issue.responded_by_team}]` : ''}</div>
               <div style="font-size:11px; color:#6b7280;">${formatDatePipe(issue.responded_at || issue.updated_at)}</div>
@@ -588,14 +628,28 @@ export default function IssueTab() {
             <div class="card-title">Issue Details</div>
             <div class="label">Description</div>
             <p style="margin: 4px 0 16px 0;">${issue.description || '-'}</p>
-            ${issuePhoto ? `<div><div class="label">Photo</div><img src="${issuePhoto}" class="photo" /></div>` : ''}
+            ${issuePhotos.length > 0 ? `
+              <div>
+                <div class="label">Photos (${issuePhotos.length})</div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;">
+                  ${issuePhotos.map((p: string) => `<img src="${p}" class="photo" />`).join('')}
+                </div>
+              </div>
+            ` : ''}
           </div>
 
           <div class="card col-half">
             <div class="card-title">Closed Details</div>
             <div class="label">Description</div>
             <p style="margin: 4px 0 16px 0;">${issue.closed_description || (issue.status === 'closed' ? 'Closed and verified' : 'Open')}</p>
-            ${closedPhoto ? `<div><div class="label">Photo</div><img src="${closedPhoto}" class="photo" /></div>` : ''}
+            ${closedPhotos.length > 0 ? `
+              <div>
+                <div class="label">Photos (${closedPhotos.length})</div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;">
+                  ${closedPhotos.map((p: string) => `<img src="${p}" class="photo" />`).join('')}
+                </div>
+              </div>
+            ` : ''}
           </div>
         </div>
 
@@ -613,7 +667,7 @@ export default function IssueTab() {
                 user_team: issue.responded_by_team || issue.assigned_team || 'Team',
                 date: issue.responded_at || issue.created_at,
                 description: issue.response_description,
-                photos: issue.response_photos || (responsePhoto ? [responsePhoto] : []),
+                photos: issue.response_photos || (issue.image_url ? [issue.image_url] : []),
               }];
             }
             if (resps.length === 0) return '<p style="color:#6b7280; font-size:12px;">No responses recorded.</p>';
@@ -624,7 +678,13 @@ export default function IssueTab() {
                 </div>
                 <div class="label">Description</div>
                 <p style="margin: 3px 0 10px 0; font-size: 12px;">${r.description || '-'}</p>
-                ${r.photos && r.photos[0] ? `<div><img src="${r.photos[0]}" class="photo" /></div>` : ''}
+                ${r.photos && r.photos.length > 0 ? `
+                  <div style="margin-top:6px;">
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                      ${r.photos.map((p: string) => `<img src="${p}" class="photo" />`).join('')}
+                    </div>
+                  </div>
+                ` : ''}
               </div>
             `).join('');
           })()}
@@ -794,6 +854,7 @@ export default function IssueTab() {
             <thead className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider select-none">
               <tr>
                 <th className="py-3 px-3 w-10 text-center">#</th>
+                <th className="py-3 px-3 w-14 text-center">PHOTOS</th>
                 <th
                   onClick={() => handleSort('location')}
                   className="py-3 px-4 cursor-pointer hover:text-gray-900 dark:hover:text-white"
@@ -842,14 +903,14 @@ export default function IssueTab() {
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={10} className="py-4 px-4 text-center">
+                    <td colSpan={11} className="py-4 px-4 text-center">
                       <div className="skeleton h-8 rounded-lg w-full" />
                     </td>
                   </tr>
                 ))
               ) : paginatedIssues.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-gray-400 text-xs">
+                  <td colSpan={11} className="py-12 text-center text-gray-400 text-xs">
                     {issues.length === 0
                       ? 'No issues recorded yet for this project. Click "+" below to report an issue.'
                       : 'No issues match the selected filters.'}
@@ -858,6 +919,14 @@ export default function IssueTab() {
               ) : (
                 paginatedIssues.map((issue, idx) => {
                   const itemIndex = (currentPage - 1) * pageSize + idx + 1;
+                  const issuePhotos = issue.photos && issue.photos.length > 0
+                    ? issue.photos
+                    : issue.image_urls && issue.image_urls.length > 0
+                    ? issue.image_urls
+                    : issue.image_url
+                    ? [issue.image_url]
+                    : [];
+
                   return (
                     <tr
                       key={issue.id}
@@ -869,6 +938,34 @@ export default function IssueTab() {
                         {itemIndex}
                       </td>
 
+                      {/* PHOTOS */}
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                        {issuePhotos.length > 0 ? (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLightbox({ images: issuePhotos, index: 0 });
+                            }}
+                            className="relative inline-flex items-center justify-center cursor-pointer group"
+                            title={`Click to view ${issuePhotos.length} photo${issuePhotos.length > 1 ? 's' : ''}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={issuePhotos[0]}
+                              alt="Issue thumbnail"
+                              className="w-9 h-9 object-cover rounded-md border border-gray-200 dark:border-gray-700 group-hover:scale-105 group-hover:border-rose-400 transition-all shadow-xs"
+                            />
+                            {issuePhotos.length > 1 && (
+                              <span className="absolute -bottom-1 -right-1 bg-black/80 text-white text-[9px] font-bold px-1 rounded-full border border-white/40 shadow-xs leading-tight">
+                                +{issuePhotos.length - 1}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-300 dark:text-gray-600 text-xs">-</span>
+                        )}
+                      </td>
+
                       {/* Location */}
                       <td className="py-3 px-4 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                         {issue.location || '-'}
@@ -876,7 +973,7 @@ export default function IssueTab() {
 
                       {/* Type */}
                       <td className="py-3 px-4 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                        {issue.issue_type || 'General'}
+                        {issue.issue_type || issue.tag || 'General'}
                       </td>
 
                       {/* Tags */}
@@ -1036,7 +1133,16 @@ export default function IssueTab() {
           onDownloadReport={() => handleDownloadReport(selectedIssue)}
           onOpenCloseModal={() => setShowCloseModal(true)}
           onOpenResponseModal={() => setShowResponseModal(true)}
-          onEnlargePhoto={(url) => setEnlargedImage(url)}
+          onEnlargePhoto={(url, allPhotos, idx) => {
+            if (allPhotos && allPhotos.length > 0) {
+              setLightbox({
+                images: allPhotos,
+                index: idx !== undefined ? idx : Math.max(0, allPhotos.indexOf(url)),
+              });
+            } else {
+              setLightbox({ images: [url], index: 0 });
+            }
+          }}
         />
       )}
 
@@ -1087,25 +1193,100 @@ export default function IssueTab() {
         />
       )}
 
-      {/* Enlarge Image Lightbox */}
-      {enlargedImage && (
+      {/* Enlarge Image Lightbox with Multi-Image Support */}
+      {lightbox && lightbox.images.length > 0 && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
-          onClick={() => setEnlargedImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in select-none"
+          onClick={() => setLightbox(null)}
         >
-          <div className="relative max-w-3xl max-h-[90vh] p-2 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl">
-            <button
-              onClick={() => setEnlargedImage(null)}
-              className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
-            >
-              <X size={16} />
-            </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={enlargedImage}
-              alt="Enlarged"
-              className="max-h-[85vh] w-auto rounded-xl object-contain"
-            />
+          <div
+            className="relative max-w-4xl max-h-[92vh] w-full flex flex-col items-center justify-center p-4 bg-white/95 dark:bg-gray-900/95 border border-white/20 dark:border-gray-800 rounded-2xl shadow-2xl backdrop-blur-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header: Counter & Close */}
+            <div className="w-full flex items-center justify-between pb-2 mb-2 border-b border-gray-200 dark:border-gray-800 text-xs">
+              <span className="font-semibold text-gray-700 dark:text-gray-300">
+                Photo {lightbox.index + 1} of {lightbox.images.length}
+              </span>
+              <button
+                onClick={() => setLightbox(null)}
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+                title="Close (Esc)"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Main Image Display Area with Prev/Next buttons */}
+            <div className="relative w-full flex items-center justify-center min-h-[300px] max-h-[70vh] overflow-hidden">
+              {lightbox.images.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLightbox((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            index: (prev.index - 1 + prev.images.length) % prev.images.length,
+                          }
+                        : null
+                    )
+                  }
+                  className="absolute left-2 z-10 w-9 h-9 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center shadow-lg transition-all hover:scale-105"
+                  title="Previous photo (Left Arrow)"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+              )}
+
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lightbox.images[lightbox.index]}
+                alt={`Photo ${lightbox.index + 1}`}
+                className="max-h-[70vh] max-w-full rounded-xl object-contain shadow-md"
+              />
+
+              {lightbox.images.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLightbox((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            index: (prev.index + 1) % prev.images.length,
+                          }
+                        : null
+                    )
+                  }
+                  className="absolute right-2 z-10 w-9 h-9 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center shadow-lg transition-all hover:scale-105"
+                  title="Next photo (Right Arrow)"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              )}
+            </div>
+
+            {/* Bottom Thumbnail Strip (if multiple photos) */}
+            {lightbox.images.length > 1 && (
+              <div className="w-full flex items-center justify-center gap-2 pt-3 mt-2 border-t border-gray-200 dark:border-gray-800 overflow-x-auto max-w-full py-1">
+                {lightbox.images.map((imgUrl, thumbIdx) => (
+                  <button
+                    key={thumbIdx}
+                    type="button"
+                    onClick={() => setLightbox((prev) => (prev ? { ...prev, index: thumbIdx } : null))}
+                    className={`relative rounded-md overflow-hidden transition-all flex-shrink-0 ${
+                      thumbIdx === lightbox.index
+                        ? 'ring-2 ring-rose-500 scale-105'
+                        : 'opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imgUrl} alt={`Thumbnail ${thumbIdx + 1}`} className="w-12 h-12 object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1145,16 +1326,33 @@ function IssueDetailModal({
   onDownloadReport: () => void;
   onOpenCloseModal: () => void;
   onOpenResponseModal: () => void;
-  onEnlargePhoto: (url: string) => void;
+  onEnlargePhoto: (url: string, allPhotos?: string[], idx?: number) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
+  const issuePhotos = useMemo(() => {
+    if (issue.photos && issue.photos.length > 0) return issue.photos;
+    if (issue.image_urls && issue.image_urls.length > 0) return issue.image_urls;
+    if (issue.image_url) return [issue.image_url];
+    return [];
+  }, [issue.photos, issue.image_urls, issue.image_url]);
+
+  const closedPhotos = useMemo(() => {
+    if (Array.isArray(issue.closed_photos) && issue.closed_photos.length > 0) {
+      return issue.closed_photos;
+    }
+    if (typeof issue.closed_photos === 'string' && issue.closed_photos) {
+      return [issue.closed_photos];
+    }
+    return [];
+  }, [issue.closed_photos]);
+
   // Edit form state
   const [editForm, setEditForm] = useState({
     location: issue.location || '',
-    issue_type: issue.issue_type || 'General',
+    issue_type: issue.issue_type || issue.tag || 'General',
     description: issue.description || '',
     status: issue.status || 'open',
     tags: issue.tags || '-',
@@ -1163,7 +1361,31 @@ function IssueDetailModal({
     assignee_name: issue.assignee_name || '',
     assigned_team: issue.assigned_team || '',
     assigned_team_phone: issue.assigned_team_phone || '',
+    photos: issuePhotos,
   });
+
+  const handleEditPhotosUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          const res = reader.result;
+          setEditForm((f) => ({ ...f, photos: [...f.photos, res] }));
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const removeEditPhoto = (idxToRemove: number) => {
+    setEditForm((f) => ({
+      ...f,
+      photos: f.photos.filter((_, i) => i !== idxToRemove),
+    }));
+  };
 
   // Close modal on Escape
   useEffect(() => {
@@ -1196,6 +1418,7 @@ function IssueDetailModal({
       id: issue.id,
       location: editForm.location.trim(),
       issue_type: editForm.issue_type,
+      tag: editForm.issue_type,
       description: editForm.description.trim(),
       status: editForm.status,
       tags: editForm.tags.trim() || '-',
@@ -1204,6 +1427,9 @@ function IssueDetailModal({
       assignee_name: editForm.assignee_name,
       assigned_team: editForm.assigned_team,
       assigned_team_phone: editForm.assigned_team_phone,
+      photos: editForm.photos,
+      image_urls: editForm.photos,
+      image_url: editForm.photos[0] || '',
       last_action_by: updaterName,
       last_action_date: nowIso,
     };
@@ -1224,6 +1450,10 @@ function IssueDetailModal({
         ...issue,
         ...payload,
         due_date: payload.due_date,
+        photos: editForm.photos,
+        image_urls: editForm.photos,
+        image_url: editForm.photos[0] || '',
+        tag: editForm.issue_type,
       };
 
       onUpdated(updated);
@@ -1236,9 +1466,6 @@ function IssueDetailModal({
   };
 
   const [showPreviousResponses, setShowPreviousResponses] = useState(true);
-
-  const issuePhoto = issue.image_url || issue.photos?.[0] || '';
-  const closedPhoto = issue.closed_photos?.[0] || '';
   const responsePhoto = issue.response_photos?.[0] || '';
 
   // Safely resolve and parse all responses
@@ -1485,6 +1712,66 @@ function IssueDetailModal({
                 />
               </div>
 
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                    Issue Photos {editForm.photos.length > 0 && `(${editForm.photos.length})`}
+                  </label>
+                  <label className="text-xs text-rose-500 hover:text-rose-600 font-semibold cursor-pointer inline-flex items-center gap-1">
+                    <Plus size={12} />
+                    <span>Add Photos</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleEditPhotosUpload}
+                    />
+                  </label>
+                </div>
+
+                {editForm.photos.length > 0 ? (
+                  <div className="flex items-center gap-2.5 flex-wrap p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/40">
+                    {editForm.photos.map((photoUrl, pIdx) => (
+                      <div
+                        key={pIdx}
+                        className="relative group w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={photoUrl}
+                          alt={`Photo ${pIdx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeEditPhoto(pIdx)}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-90 hover:opacity-100 shadow transition-opacity"
+                          title="Remove photo"
+                        >
+                          <X size={12} />
+                        </button>
+                        <span className="absolute bottom-0 left-0 bg-black/60 text-white text-[9px] font-bold px-1 rounded-tr">
+                          #{pIdx + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 p-3 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-xs text-gray-500 transition-colors">
+                    <Camera size={14} className="text-gray-400" />
+                    <span>Click to upload photos for this issue (multiple supported)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleEditPhotosUpload}
+                    />
+                  </label>
+                )}
+              </div>
+
               {editError && <p className="text-xs text-rose-500 font-medium">{editError}</p>}
 
               <div className="flex gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
@@ -1668,17 +1955,25 @@ function IssueDetailModal({
                   </div>
 
                   <div className="mt-4">
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Photos</p>
-                    {issuePhoto ? (
-                      <div
-                        onClick={() => onEnlargePhoto(issuePhoto)}
-                        className="relative inline-block cursor-pointer group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={issuePhoto} alt="Issue" className="w-16 h-16 object-cover" />
-                        <span className="absolute bottom-0 right-0 bg-black/60 text-white text-[10px] font-bold px-1 rounded-tl">
-                          +1
-                        </span>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                      Photos {issuePhotos.length > 0 && `(${issuePhotos.length})`}
+                    </p>
+                    {issuePhotos.length > 0 ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {issuePhotos.map((photo, pIdx) => (
+                          <div
+                            key={pIdx}
+                            onClick={() => onEnlargePhoto(photo, issuePhotos, pIdx)}
+                            className="relative inline-block cursor-pointer group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:scale-105 transition-transform"
+                            title={`Photo ${pIdx + 1} of ${issuePhotos.length}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={photo} alt={`Issue photo ${pIdx + 1}`} className="w-16 h-16 object-cover" />
+                            <span className="absolute bottom-0 right-0 bg-black/60 text-white text-[10px] font-bold px-1 rounded-tl">
+                              #{pIdx + 1}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <span className="text-xs text-gray-400 dark:text-gray-500">-</span>
@@ -1713,17 +2008,25 @@ function IssueDetailModal({
                   </div>
 
                   <div className="mt-4">
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Photos</p>
-                    {closedPhoto ? (
-                      <div
-                        onClick={() => onEnlargePhoto(closedPhoto)}
-                        className="relative inline-block cursor-pointer group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={closedPhoto} alt="Closed" className="w-16 h-16 object-cover" />
-                        <span className="absolute bottom-0 right-0 bg-black/60 text-white text-[10px] font-bold px-1 rounded-tl">
-                          +1
-                        </span>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                      Photos {closedPhotos.length > 0 && `(${closedPhotos.length})`}
+                    </p>
+                    {closedPhotos.length > 0 ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {closedPhotos.map((photo, pIdx) => (
+                          <div
+                            key={pIdx}
+                            onClick={() => onEnlargePhoto(photo, closedPhotos, pIdx)}
+                            className="relative inline-block cursor-pointer group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:scale-105 transition-transform"
+                            title={`Closed photo ${pIdx + 1} of ${closedPhotos.length}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={photo} alt={`Closed photo ${pIdx + 1}`} className="w-16 h-16 object-cover" />
+                            <span className="absolute bottom-0 right-0 bg-black/60 text-white text-[10px] font-bold px-1 rounded-tl">
+                              #{pIdx + 1}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <span className="text-xs text-gray-400 dark:text-gray-500">-</span>
@@ -1789,7 +2092,7 @@ function IssueDetailModal({
                               {latestResponse.photos.map((photo, pIdx) => (
                                 <div
                                   key={pIdx}
-                                  onClick={() => onEnlargePhoto(photo)}
+                                  onClick={() => onEnlargePhoto(photo, latestResponse.photos || [], pIdx)}
                                   className="relative inline-block cursor-pointer group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700"
                                 >
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1854,8 +2157,9 @@ function IssueDetailModal({
                                       {resp.photos.map((photo, pIdx) => (
                                         <div
                                           key={pIdx}
-                                          onClick={() => onEnlargePhoto(photo)}
-                                          className="relative inline-block cursor-pointer group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700"
+                                          onClick={() => onEnlargePhoto(photo, resp.photos || [], pIdx)}
+                                          className="relative inline-block cursor-pointer group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:scale-105 transition-transform"
+                                          title={`Previous photo ${pIdx + 1} of ${resp.photos?.length || 1}`}
                                         >
                                           {/* eslint-disable-next-line @next/next/no-img-element */}
                                           <img src={photo} alt={`Previous photo ${pIdx + 1}`} className="w-16 h-16 object-cover" />
@@ -1941,11 +2245,10 @@ function AddIssueModal({
     reported_by: initialReporter?.user_id || initialReporter?.id || currentUser?.id || '',
     reported_by_name: initialReporter?.user_name || currentUser?.name || '',
     reported_by_team: initialReporter?.user_teams || 'Main Team',
-    image_url: '',
     tags: '-',
   });
 
-  const [imagePreview, setImagePreview] = useState<string>('');
+  const [photos, setPhotos] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -1992,16 +2295,23 @@ function AddIssueModal({
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setImagePreview(reader.result);
-        setForm((f) => ({ ...f, image_url: reader.result as string }));
-      }
-    };
-    reader.readAsDataURL(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          const res = reader.result;
+          setPhotos((prev) => [...prev, res]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const removePhoto = (idxToRemove: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== idxToRemove));
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -2023,6 +2333,7 @@ function AddIssueModal({
         title: form.title.trim() || `${form.issue_type} - ${form.location.trim()}`,
         description: form.description.trim(),
         location: form.location.trim(),
+        tag: form.issue_type,
         issue_type: form.issue_type,
         severity: form.severity,
         status: form.status,
@@ -2034,8 +2345,9 @@ function AddIssueModal({
         reported_by: form.reported_by || null,
         reported_by_name: form.reported_by_name,
         reported_by_team: form.reported_by_team,
-        image_url: form.image_url,
-        photos: form.image_url ? [form.image_url] : [],
+        image_url: photos[0] || '',
+        image_urls: photos,
+        photos: photos,
         tags: form.tags || '-',
         rejections: 'R0',
         last_action_by: form.reported_by_name || 'Admin',
@@ -2166,33 +2478,59 @@ function AddIssueModal({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-              Photo
-            </label>
-            {imagePreview ? (
-              <div className="relative inline-block mt-1">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imagePreview}
-                  alt="Thumb"
-                  className="w-20 h-20 object-cover rounded-xl border border-gray-200 dark:border-gray-700"
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Photos {photos.length > 0 && `(${photos.length})`}
+              </label>
+              <label className="cursor-pointer text-xs font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 inline-flex items-center gap-1">
+                <Camera size={13} />
+                <span>+ Add {photos.length > 0 ? 'More' : 'Photo'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handlePhotoUpload}
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImagePreview('');
-                    setForm((f) => ({ ...f, image_url: '' }));
-                  }}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow"
-                >
-                  <X size={12} />
-                </button>
+              </label>
+            </div>
+
+            {photos.length > 0 ? (
+              <div className="flex items-center gap-2 flex-wrap p-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl">
+                {photos.map((photo, idx) => (
+                  <div key={idx} className="relative inline-block group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo}
+                      alt={`Issue preview ${idx + 1}`}
+                      className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(idx)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow hover:bg-rose-600 cursor-pointer"
+                      title="Remove photo"
+                    >
+                      <X size={12} />
+                    </button>
+                    <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white text-[9px] font-bold px-1 rounded">
+                      #{idx + 1}
+                    </span>
+                  </div>
+                ))}
               </div>
             ) : (
-              <label className="flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 cursor-pointer text-xs text-gray-600">
-                <Camera size={15} className="text-rose-500" />
-                <span>Upload Photo</span>
-                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+              <label className="flex flex-col items-center justify-center p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 hover:bg-gray-100/50 dark:bg-gray-800/40 cursor-pointer transition-colors text-xs text-gray-500">
+                <Camera size={20} className="text-rose-500 mb-1" />
+                <span className="font-medium text-gray-700 dark:text-gray-300">Upload Issue Photos</span>
+                <span className="text-[11px] text-gray-400">Select one or multiple images</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
               </label>
             )}
           </div>
@@ -2304,24 +2642,32 @@ function CloseIssueModal({
   onConfirm,
 }: {
   onClose: () => void;
-  onConfirm: (desc: string, photo: string) => void;
+  onConfirm: (desc: string, photo: string | string[]) => void;
 }) {
   const [desc, setDesc] = useState(
     'AC remote kept on the original place and key holder is changed'
   );
-  const [photo, setPhoto] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setPhoto(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          const res = reader.result;
+          setPhotos((prev) => [...prev, res]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const removePhoto = (idxToRemove: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== idxToRemove));
   };
 
   return (
@@ -2349,26 +2695,39 @@ function CloseIssueModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Resolution Photo
-            </label>
-            {photo ? (
-              <div className="relative inline-block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo} alt="Resolution" className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
-                <button
-                  type="button"
-                  onClick={() => setPhoto('')}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow"
-                >
-                  <X size={12} />
-                </button>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                Resolution Photos {photos.length > 0 && `(${photos.length})`}
+              </label>
+              <label className="cursor-pointer text-xs font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400 inline-flex items-center gap-1">
+                <Camera size={13} />
+                <span>+ Add {photos.length > 0 ? 'More' : 'Photo'}</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
+              </label>
+            </div>
+
+            {photos.length > 0 ? (
+              <div className="flex items-center gap-2 flex-wrap p-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl">
+                {photos.map((p, idx) => (
+                  <div key={idx} className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p} alt={`Resolution ${idx + 1}`} className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(idx)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow cursor-pointer hover:bg-rose-600"
+                      title="Remove"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
               </div>
             ) : (
               <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-xs text-gray-700 dark:text-gray-300 transition-colors">
                 <Camera size={14} className="text-teal-500" />
-                <span>Upload resolution photo</span>
-                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                <span>Upload resolution photos (single or multiple)</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
               </label>
             )}
           </div>
@@ -2382,7 +2741,7 @@ function CloseIssueModal({
               disabled={loading}
               onClick={() => {
                 setLoading(true);
-                onConfirm(desc, photo);
+                onConfirm(desc, photos);
               }}
               className="btn-primary flex-1 text-xs py-2 bg-emerald-600 hover:bg-emerald-700 text-white"
             >
@@ -2404,20 +2763,30 @@ function AddResponseModal({
   onConfirm,
 }: {
   onClose: () => void;
-  onConfirm: (desc: string, photo: string) => void;
+  onConfirm: (desc: string, photo: string | string[]) => void;
 }) {
   const [desc, setDesc] = useState('');
-  const [photo, setPhoto] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') setPhoto(reader.result);
-    };
-    reader.readAsDataURL(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          const res = reader.result;
+          setPhotos((prev) => [...prev, res]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const removePhoto = (idxToRemove: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== idxToRemove));
   };
 
   return (
@@ -2446,26 +2815,39 @@ function AddResponseModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Attachment Photo
-            </label>
-            {photo ? (
-              <div className="relative inline-block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo} alt="Attached" className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
-                <button
-                  type="button"
-                  onClick={() => setPhoto('')}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow"
-                >
-                  <X size={12} />
-                </button>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                Attachment Photos {photos.length > 0 && `(${photos.length})`}
+              </label>
+              <label className="cursor-pointer text-xs font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400 inline-flex items-center gap-1">
+                <Camera size={13} />
+                <span>+ Add {photos.length > 0 ? 'More' : 'Photo'}</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
+              </label>
+            </div>
+
+            {photos.length > 0 ? (
+              <div className="flex items-center gap-2 flex-wrap p-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl">
+                {photos.map((p, idx) => (
+                  <div key={idx} className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p} alt={`Attached ${idx + 1}`} className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(idx)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow cursor-pointer hover:bg-rose-600"
+                      title="Remove"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
               </div>
             ) : (
               <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-xs text-gray-700 dark:text-gray-300 transition-colors">
                 <Camera size={14} className="text-teal-500" />
-                <span>Upload attachment photo</span>
-                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                <span>Upload attachment photos (single or multiple)</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
               </label>
             )}
           </div>
@@ -2479,7 +2861,7 @@ function AddResponseModal({
               disabled={loading || !desc.trim()}
               onClick={() => {
                 setLoading(true);
-                onConfirm(desc, photo);
+                onConfirm(desc, photos);
               }}
               className="btn-primary flex-1 text-xs py-2"
             >

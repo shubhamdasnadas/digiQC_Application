@@ -13,39 +13,17 @@ async function ensureIssuesTable(orgId: string) {
     `CREATE TABLE IF NOT EXISTS public.issues (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       project_id uuid,
-      title text DEFAULT '',
       description text DEFAULT '',
       location text DEFAULT '',
-      issue_type text DEFAULT 'Quality',
-      severity text NOT NULL DEFAULT 'medium',
+      tag text DEFAULT 'Quality',
       status text NOT NULL DEFAULT 'open',
       assignee_id uuid,
       assignee_name text DEFAULT '',
-      assigned_team text DEFAULT '',
-      assigned_team_phone text DEFAULT '',
       reported_by uuid,
       reported_by_name text DEFAULT '',
-      reported_by_team text DEFAULT '',
       image_url text DEFAULT '',
-      photos jsonb DEFAULT '[]'::jsonb,
       tags text DEFAULT '',
       responded_by text DEFAULT '',
-      responded_by_name text DEFAULT '',
-      responded_by_team text DEFAULT '',
-      responded_at timestamptz,
-      response_description text DEFAULT '',
-      response_photos jsonb DEFAULT '[]'::jsonb,
-      responses jsonb DEFAULT '[]'::jsonb,
-      closed_by uuid,
-      closed_by_name text DEFAULT '',
-      closed_by_team text DEFAULT '',
-      closed_at timestamptz,
-      closed_description text DEFAULT '',
-      closed_photos jsonb DEFAULT '[]'::jsonb,
-      geo_tag text DEFAULT '',
-      rejections text DEFAULT 'R0',
-      last_action_by text DEFAULT '',
-      last_action_date timestamptz DEFAULT now(),
       due_date timestamptz,
       created_at timestamptz DEFAULT now(),
       updated_at timestamptz DEFAULT now()
@@ -54,6 +32,7 @@ async function ensureIssuesTable(orgId: string) {
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS title text DEFAULT ''`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS description text DEFAULT ''`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS location text DEFAULT ''`,
+    `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS tag text DEFAULT 'Quality'`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS issue_type text DEFAULT 'Quality'`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS severity text DEFAULT 'medium'`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS status text DEFAULT 'open'`,
@@ -65,6 +44,7 @@ async function ensureIssuesTable(orgId: string) {
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS reported_by_name text DEFAULT ''`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS reported_by_team text DEFAULT ''`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS image_url text DEFAULT ''`,
+    `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS image_urls text[] DEFAULT '{}'`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS photos jsonb DEFAULT '[]'::jsonb`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS tags text DEFAULT ''`,
     `ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS responded_by text DEFAULT ''`,
@@ -212,8 +192,10 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
          COALESCE(${reportedByNameExpr}, m_reporter.name, u_reporter.name, '') AS reported_by_name,
          COALESCE(${reportedByTeamExpr}, m_reporter.teams, '') AS reported_by_team,
          ${c('image_url')} AS image_url,
+         ${existingCols.has('image_urls') ? 'i.image_urls' : "'{}'::text[] AS image_urls"},
          ${existingCols.has('photos') ? 'i.photos' : "'[]'::jsonb AS photos"},
          ${c('tags')} AS tags,
+         ${existingCols.has('tag') ? c('tag', "'Quality'") : c('issue_type', "'Quality'")} AS tag,
          ${c('responded_by')} AS responded_by,
          ${c('responded_by_name')} AS responded_by_name,
          ${c('responded_by_team')} AS responded_by_team,
@@ -247,21 +229,48 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
       if (!val) return [];
       if (Array.isArray(val)) return val;
       if (typeof val === 'string') {
-        try {
-          const parsed = JSON.parse(val);
-          if (Array.isArray(parsed)) return parsed;
-        } catch {}
+        const trimmed = val.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parsed.filter(Boolean);
+          } catch {}
+        }
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+          const items = trimmed.slice(1, -1).split(',').map((s: string) => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+          if (items.length > 0) return items;
+        }
+        if (trimmed) return [trimmed];
       }
       return [];
     };
 
-    const sanitizedRows = rows.map((r: any) => ({
-      ...r,
-      photos: safeParse(r.photos),
-      response_photos: safeParse(r.response_photos),
-      closed_photos: safeParse(r.closed_photos),
-      responses: safeParse(r.responses),
-    }));
+    const sanitizedRows = rows.map((r: any) => {
+      const parsedPhotos = safeParse(r.photos);
+      const parsedImageUrls = safeParse(r.image_urls);
+      const rawImageUrl = typeof r.image_url === 'string' ? r.image_url.trim() : '';
+
+      const allPhotos = Array.from(new Set([
+        ...parsedPhotos,
+        ...parsedImageUrls,
+        ...(rawImageUrl ? (rawImageUrl.startsWith('[') || rawImageUrl.startsWith('{') ? safeParse(rawImageUrl) : [rawImageUrl]) : [])
+      ])).filter((url): url is string => Boolean(url && typeof url === 'string'));
+
+      const primaryImageUrl = allPhotos[0] || rawImageUrl || '';
+      const finalTag = r.tag || r.issue_type || 'Quality';
+
+      return {
+        ...r,
+        tag: finalTag,
+        issue_type: r.issue_type || finalTag,
+        photos: allPhotos,
+        image_urls: allPhotos,
+        image_url: primaryImageUrl,
+        response_photos: safeParse(r.response_photos),
+        closed_photos: safeParse(r.closed_photos),
+        responses: safeParse(r.responses),
+      };
+    });
 
     return NextResponse.json(sanitizedRows);
   } catch (error) {
@@ -358,11 +367,30 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
         }
       }
 
-      const photosArray = Array.isArray(r.photos)
-        ? r.photos
-        : r.image_url
-        ? [r.image_url]
-        : [];
+      const rawPhotosList: string[] = [];
+      if (Array.isArray(r.photos)) {
+        rawPhotosList.push(...r.photos);
+      } else if (typeof r.photos === 'string' && r.photos.trim()) {
+        try {
+          const parsed = JSON.parse(r.photos);
+          if (Array.isArray(parsed)) rawPhotosList.push(...parsed);
+          else rawPhotosList.push(r.photos);
+        } catch {
+          rawPhotosList.push(r.photos);
+        }
+      }
+      if (Array.isArray(r.image_urls)) {
+        rawPhotosList.push(...r.image_urls);
+      } else if (typeof r.image_urls === 'string' && r.image_urls.trim()) {
+        rawPhotosList.push(r.image_urls);
+      }
+      if (typeof r.image_url === 'string' && r.image_url.trim()) {
+        if (!rawPhotosList.includes(r.image_url.trim())) {
+          rawPhotosList.push(r.image_url.trim());
+        }
+      }
+
+      const photosArray = Array.from(new Set(rawPhotosList.filter(Boolean)));
 
       // Dynamically map existing columns in the issues table
       const colNames: string[] = [];
@@ -383,7 +411,8 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       setVal('title', finalTitle);
       setVal('description', r.description ?? '');
       setVal('location', r.location ?? '');
-      setVal('issue_type', r.issue_type ?? 'General');
+      setVal('tag', r.tag || r.issue_type || 'Quality');
+      setVal('issue_type', r.issue_type || r.tag || 'Quality');
       setVal('severity', r.severity ?? 'medium');
       setVal('status', r.status ?? 'open');
       setVal('assignee_id', cleanAssigneeId);
@@ -393,7 +422,8 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       setVal('reported_by', cleanReportedBy);
       setVal('reported_by_name', reportedByName);
       setVal('reported_by_team', reportedByTeam);
-      setVal('image_url', r.image_url || (photosArray[0] ?? ''));
+      setVal('image_url', photosArray[0] || r.image_url || '');
+      setVal('image_urls', photosArray);
       setVal('photos', JSON.stringify(photosArray));
       setVal('tags', r.tags ?? '');
       setVal('responded_by', r.responded_by ?? '');
@@ -430,7 +460,8 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
             title: finalTitle,
             description: r.description ?? '',
             location: r.location ?? '',
-            issue_type: r.issue_type ?? 'General',
+            tag: r.tag || r.issue_type || 'Quality',
+            issue_type: r.issue_type || r.tag || 'Quality',
             severity: r.severity ?? 'medium',
             status: r.status ?? 'open',
             assignee_id: cleanAssigneeId,
@@ -440,7 +471,8 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
             reported_by: cleanReportedBy,
             reported_by_name: reportedByName,
             reported_by_team: reportedByTeam,
-            image_url: r.image_url || (photosArray[0] ?? ''),
+            image_url: photosArray[0] || r.image_url || '',
+            image_urls: photosArray,
             photos: photosArray,
             tags: r.tags ?? '',
             rejections: r.rejections ?? 'R0',
@@ -498,7 +530,14 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
     if (body.status !== undefined) addUpdate('status', body.status);
     if (body.severity !== undefined) addUpdate('severity', body.severity);
     if (body.location !== undefined) addUpdate('location', body.location);
+    if (body.tag !== undefined) addUpdate('tag', body.tag);
     if (body.issue_type !== undefined) addUpdate('issue_type', body.issue_type);
+    if (body.tag !== undefined && body.issue_type === undefined && existingCols.has('issue_type')) {
+      addUpdate('issue_type', body.tag);
+    }
+    if (body.issue_type !== undefined && body.tag === undefined && existingCols.has('tag')) {
+      addUpdate('tag', body.issue_type);
+    }
     if (body.title !== undefined) addUpdate('title', body.title);
     if (body.description !== undefined) addUpdate('description', body.description);
     if (body.tags !== undefined) addUpdate('tags', body.tags);
@@ -516,8 +555,25 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
       const parsed = body.due_date ? new Date(body.due_date) : null;
       addUpdate('due_date', parsed && !isNaN(parsed.getTime()) ? parsed : null);
     }
-    if (body.image_url !== undefined) addUpdate('image_url', body.image_url);
-    if (body.photos !== undefined) addUpdate('photos', JSON.stringify(body.photos));
+    if (body.image_url !== undefined || body.photos !== undefined || body.image_urls !== undefined) {
+      const pList: string[] = [];
+      if (Array.isArray(body.photos)) pList.push(...body.photos);
+      else if (typeof body.photos === 'string' && body.photos.trim()) {
+        try {
+          const p = JSON.parse(body.photos);
+          if (Array.isArray(p)) pList.push(...p);
+          else pList.push(body.photos);
+        } catch { pList.push(body.photos); }
+      }
+      if (Array.isArray(body.image_urls)) pList.push(...body.image_urls);
+      if (typeof body.image_url === 'string' && body.image_url.trim()) {
+        if (!pList.includes(body.image_url.trim())) pList.push(body.image_url.trim());
+      }
+      const uniquePhotos = Array.from(new Set(pList.filter(Boolean)));
+      if (existingCols.has('photos')) addUpdate('photos', JSON.stringify(uniquePhotos));
+      if (existingCols.has('image_urls')) addUpdate('image_urls', uniquePhotos);
+      if (existingCols.has('image_url')) addUpdate('image_url', uniquePhotos[0] || (typeof body.image_url === 'string' ? body.image_url : ''));
+    }
 
     // Response updates
     if (body.responded_by_name !== undefined) addUpdate('responded_by_name', body.responded_by_name);

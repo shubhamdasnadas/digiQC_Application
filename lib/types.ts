@@ -272,6 +272,7 @@ export interface Issue {
   title: string;
   description: string;
   location?: string;
+  tag?: string;
   issue_type?: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   status: 'open' | 'in_progress' | 'resolved' | 'closed';
@@ -283,6 +284,7 @@ export interface Issue {
   reported_by_name?: string;
   reported_by_team?: string;
   image_url?: string;
+  image_urls?: string[];
   photos?: string[];
   tags?: string;
   responded_by?: string;

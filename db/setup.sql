@@ -360,20 +360,15 @@ ON public.eqcs (project_id) WHERE rfi_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS public.issues (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
-  title text DEFAULT '',
   description text DEFAULT '',
   location text DEFAULT '',
-  issue_type text DEFAULT 'Quality',
-  severity text NOT NULL DEFAULT 'medium'
-    CHECK (severity IN ('low','medium','high','critical')),
+  tag text DEFAULT 'Quality',
   status text NOT NULL DEFAULT 'open'
     CHECK (status IN ('open','in_progress','resolved','closed')),
   assignee_id uuid,
   assignee_name text DEFAULT '',
-  assigned_team text DEFAULT '',
   reported_by uuid,
   reported_by_name text DEFAULT '',
-  reported_by_team text DEFAULT '',
   image_url text DEFAULT '',
   tags text DEFAULT '',
   responded_by text DEFAULT '',
@@ -386,6 +381,7 @@ ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS project_id uuid;
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS title text DEFAULT '';
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS description text DEFAULT '';
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS location text DEFAULT '';
+ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS tag text DEFAULT 'Quality';
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS issue_type text DEFAULT 'Quality';
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS severity text DEFAULT 'medium';
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS status text DEFAULT 'open';
@@ -397,6 +393,7 @@ ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS reported_by uuid;
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS reported_by_name text DEFAULT '';
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS reported_by_team text DEFAULT '';
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS image_url text DEFAULT '';
+ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS image_urls text[] DEFAULT '{}';
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS photos jsonb DEFAULT '[]'::jsonb;
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS tags text DEFAULT '';
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS responded_by text DEFAULT '';
