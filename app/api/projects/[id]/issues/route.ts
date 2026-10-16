@@ -95,6 +95,45 @@ async function ensureIssuesTable(orgId: string) {
       `UPDATE public.issues SET project = project_id WHERE project IS NULL AND project_id IS NOT NULL`
     );
   } catch {}
+
+  // Backfill image_urls and photos from image_url if empty
+  try {
+    await orgQuery(
+      orgId,
+      `UPDATE public.issues
+       SET image_urls = ARRAY[image_url]
+       WHERE (image_urls IS NULL OR image_urls = '{}')
+         AND image_url IS NOT NULL AND image_url != ''`
+    );
+  } catch {}
+  try {
+    await orgQuery(
+      orgId,
+      `UPDATE public.issues
+       SET photos = json_build_array(image_url)::jsonb
+       WHERE (photos IS NULL OR photos = '[]'::jsonb)
+         AND image_url IS NOT NULL AND image_url != ''`
+    );
+  } catch {}
+  try {
+    await orgQuery(
+      orgId,
+      `UPDATE public.issues
+       SET image_url = image_urls[1]
+       WHERE (image_url IS NULL OR image_url = '')
+         AND image_urls IS NOT NULL AND array_length(image_urls, 1) > 0`
+    );
+  } catch {}
+
+  // Backfill tag from issue_type if empty
+  try {
+    await orgQuery(
+      orgId,
+      `UPDATE public.issues
+       SET tag = issue_type
+       WHERE (tag IS NULL OR tag = '') AND issue_type IS NOT NULL AND issue_type != ''`
+    );
+  } catch {}
 }
 
 export async function GET(request: NextRequest, ctx: RouteContext) {

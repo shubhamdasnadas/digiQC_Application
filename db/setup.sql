@@ -370,6 +370,8 @@ CREATE TABLE IF NOT EXISTS public.issues (
   reported_by uuid,
   reported_by_name text DEFAULT '',
   image_url text DEFAULT '',
+  image_urls text[] DEFAULT '{}',
+  photos jsonb DEFAULT '[]'::jsonb,
   tags text DEFAULT '',
   responded_by text DEFAULT '',
   due_date timestamptz,
@@ -473,6 +475,39 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN NULL;
     END;
   END IF;
+
+  -- Backfill image_urls and photos from image_url if they are empty
+  BEGIN
+    UPDATE public.issues
+    SET image_urls = ARRAY[image_url]
+    WHERE (image_urls IS NULL OR image_urls = '{}')
+      AND image_url IS NOT NULL AND image_url != '';
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
+  BEGIN
+    UPDATE public.issues
+    SET photos = json_build_array(image_url)::jsonb
+    WHERE (photos IS NULL OR photos = '[]'::jsonb)
+      AND image_url IS NOT NULL AND image_url != '';
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
+  BEGIN
+    UPDATE public.issues
+    SET image_url = image_urls[1]
+    WHERE (image_url IS NULL OR image_url = '')
+      AND image_urls IS NOT NULL AND array_length(image_urls, 1) > 0;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
+  -- Backfill tag from issue_type if tag is empty
+  BEGIN
+    UPDATE public.issues
+    SET tag = issue_type
+    WHERE (tag IS NULL OR tag = '') AND issue_type IS NOT NULL AND issue_type != '';
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
 END $$;
 
 CREATE INDEX IF NOT EXISTS issues_project_status_idx

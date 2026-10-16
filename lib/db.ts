@@ -445,18 +445,34 @@ export async function ensurePublicSchemaTables() {
         title text DEFAULT '',
         description text DEFAULT '',
         location text DEFAULT '',
+        tag text DEFAULT 'Quality',
         issue_type text DEFAULT 'Quality',
         severity text NOT NULL DEFAULT 'medium',
         status text NOT NULL DEFAULT 'open',
         assignee_id uuid,
         assignee_name text DEFAULT '',
         assigned_team text DEFAULT '',
+        assigned_team_phone text DEFAULT '',
         reported_by uuid,
         reported_by_name text DEFAULT '',
         reported_by_team text DEFAULT '',
         image_url text DEFAULT '',
+        image_urls text[] DEFAULT '{}',
+        photos jsonb DEFAULT '[]'::jsonb,
         tags text DEFAULT '',
         responded_by text DEFAULT '',
+        responded_by_name text DEFAULT '',
+        responded_by_team text DEFAULT '',
+        responded_at timestamptz,
+        response_description text DEFAULT '',
+        response_photos jsonb DEFAULT '[]'::jsonb,
+        responses jsonb DEFAULT '[]'::jsonb,
+        closed_by uuid,
+        closed_by_name text DEFAULT '',
+        closed_by_team text DEFAULT '',
+        closed_at timestamptz,
+        closed_description text DEFAULT '',
+        closed_photos jsonb DEFAULT '[]'::jsonb,
         due_date timestamptz,
         created_at timestamptz DEFAULT now(),
         updated_at timestamptz DEFAULT now()
@@ -466,18 +482,38 @@ export async function ensurePublicSchemaTables() {
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS title text DEFAULT '';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS description text DEFAULT '';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS location text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS tag text DEFAULT 'Quality';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS issue_type text DEFAULT 'Quality';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS severity text DEFAULT 'medium';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS status text DEFAULT 'open';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS assignee_id uuid;
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS assignee_name text DEFAULT '';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS assigned_team text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS assigned_team_phone text DEFAULT '';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS reported_by uuid;
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS reported_by_name text DEFAULT '';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS reported_by_team text DEFAULT '';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS image_url text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS image_urls text[] DEFAULT '{}';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS photos jsonb DEFAULT '[]'::jsonb;
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS tags text DEFAULT '';
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS responded_by text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS responded_by_name text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS responded_by_team text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS responded_at timestamptz;
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS response_description text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS response_photos jsonb DEFAULT '[]'::jsonb;
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS responses jsonb DEFAULT '[]'::jsonb;
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS closed_by uuid;
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS closed_by_name text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS closed_by_team text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS closed_at timestamptz;
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS closed_description text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS closed_photos jsonb DEFAULT '[]'::jsonb;
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS geo_tag text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS rejections text DEFAULT 'R0';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS last_action_by text DEFAULT '';
+      ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS last_action_date timestamptz DEFAULT now();
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS due_date timestamptz;
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
       ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
@@ -538,6 +574,39 @@ export async function ensurePublicSchemaTables() {
           EXCEPTION WHEN OTHERS THEN NULL;
           END;
         END IF;
+
+        -- Backfill image_urls and photos from image_url if they are empty
+        BEGIN
+          UPDATE public.issues
+          SET image_urls = ARRAY[image_url]
+          WHERE (image_urls IS NULL OR image_urls = '{}')
+            AND image_url IS NOT NULL AND image_url != '';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+
+        BEGIN
+          UPDATE public.issues
+          SET photos = json_build_array(image_url)::jsonb
+          WHERE (photos IS NULL OR photos = '[]'::jsonb)
+            AND image_url IS NOT NULL AND image_url != '';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+
+        BEGIN
+          UPDATE public.issues
+          SET image_url = image_urls[1]
+          WHERE (image_url IS NULL OR image_url = '')
+            AND image_urls IS NOT NULL AND array_length(image_urls, 1) > 0;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+
+        -- Backfill tag from issue_type if tag is empty
+        BEGIN
+          UPDATE public.issues
+          SET tag = issue_type
+          WHERE (tag IS NULL OR tag = '') AND issue_type IS NOT NULL AND issue_type != '';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
       END $$;
     `);
     publicSchemaInitialized = true;

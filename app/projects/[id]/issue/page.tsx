@@ -854,7 +854,7 @@ export default function IssueTab() {
             <thead className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider select-none">
               <tr>
                 <th className="py-3 px-3 w-10 text-center">#</th>
-                <th className="py-3 px-3 w-14 text-center">PHOTOS</th>
+                <th className="py-3 px-3 min-w-[120px] text-center">PHOTOS</th>
                 <th
                   onClick={() => handleSort('location')}
                   className="py-3 px-4 cursor-pointer hover:text-gray-900 dark:hover:text-white"
@@ -941,24 +941,41 @@ export default function IssueTab() {
                       {/* PHOTOS */}
                       <td className="py-2 px-3 text-center whitespace-nowrap">
                         {issuePhotos.length > 0 ? (
-                          <div
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setLightbox({ images: issuePhotos, index: 0 });
-                            }}
-                            className="relative inline-flex items-center justify-center cursor-pointer group"
-                            title={`Click to view ${issuePhotos.length} photo${issuePhotos.length > 1 ? 's' : ''}`}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={issuePhotos[0]}
-                              alt="Issue thumbnail"
-                              className="w-9 h-9 object-cover rounded-md border border-gray-200 dark:border-gray-700 group-hover:scale-105 group-hover:border-rose-400 transition-all shadow-xs"
-                            />
-                            {issuePhotos.length > 1 && (
-                              <span className="absolute -bottom-1 -right-1 bg-black/80 text-white text-[9px] font-bold px-1 rounded-full border border-white/40 shadow-xs leading-tight">
-                                +{issuePhotos.length - 1}
-                              </span>
+                          <div className="flex items-center justify-center gap-1.5 flex-nowrap">
+                            {issuePhotos.slice(0, 3).map((photoUrl, pIdx) => (
+                              <div
+                                key={pIdx}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLightbox({ images: issuePhotos, index: pIdx });
+                                }}
+                                className="relative inline-flex items-center justify-center cursor-pointer group flex-shrink-0"
+                                title={`Photo ${pIdx + 1} of ${issuePhotos.length} - Click to enlarge`}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={photoUrl}
+                                  alt={`Photo ${pIdx + 1}`}
+                                  className="w-8 h-8 object-cover rounded-md border border-gray-200 dark:border-gray-700 group-hover:scale-110 group-hover:border-rose-500 transition-all shadow-xs"
+                                />
+                                {issuePhotos.length > 1 && (
+                                  <span className="absolute bottom-0 right-0 bg-black/75 text-white text-[8px] font-bold px-0.5 rounded-tl leading-none">
+                                    #{pIdx + 1}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            {issuePhotos.length > 3 && (
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLightbox({ images: issuePhotos, index: 3 });
+                                }}
+                                className="w-8 h-8 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+                                title={`Click to view ${issuePhotos.length - 3} more photos`}
+                              >
+                                +{issuePhotos.length - 3}
+                              </div>
                             )}
                           </div>
                         ) : (
@@ -971,9 +988,9 @@ export default function IssueTab() {
                         {issue.location || '-'}
                       </td>
 
-                      {/* Type */}
+                      {/* Type / Tag */}
                       <td className="py-3 px-4 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                        {issue.issue_type || issue.tag || 'General'}
+                        {issue.tag || issue.issue_type || 'General'}
                       </td>
 
                       {/* Tags */}
